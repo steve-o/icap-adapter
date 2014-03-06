@@ -35,6 +35,7 @@ import com.reuters.rfa.session.event.ConnectionEvent;
 import com.reuters.rfa.session.event.EntitlementsAuthenticationEvent;
 import com.reuters.rfa.session.event.MarketDataItemEvent;
 import com.reuters.rfa.session.event.MarketDataSvcEvent;
+import com.reuters.rfa.session.event.MarketDataSvcStatus;
 import com.reuters.rfa.session.Session;
 import com.reuters.rfa.session.MarketDataEnums;
 import com.reuters.rfa.session.MarketDataItemSub;
@@ -789,35 +790,6 @@ LOG.info ("OnMarketDataSvcEvent: {}", event);
 		{
 			this.is_muted = false;
 			this.resubscribe();
-		}
-	}
-
-/* For manual processing of incoming data dictionaries from SSLED.
- */
-	private void OnMarketDataDictEvent (MarketDataDictEvent event) {
-Log.info ("OnMarketDataDictEvent: {}", event);
-		if (MarketDataDictStatus.OK != event.getStatus().getState()) {
-			LOG.warn ("Data dictionary request failed: {}", event.getStatus().getStatusText());
-			return;
-		}
-		if (DataDictInfo.MARKETFEED != event.getDataDictInfo().getDictType()) {
-			LOG.warn ("Received non-Marketfeed data dictionary.");
-			return;
-		}
-
-		byte[] data = event.getData();
-		final int length = (data != null ? data.length : 0);
-
-		if (0 == length)
-			return;
-
-		try {
-			this.msg.ReUse();
-			this.msg.UnPack (data);
-			TibMsg.UnPackMfeedDictionary (this.msg);
-			LOG.info ("Dictionary unpacked.");
-		} catch (TibException e) {
-			LOG.warn ("Unable to unpack data dictionary with TibMsg.");
 		}
 	}
 
