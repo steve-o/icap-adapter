@@ -81,7 +81,7 @@ public class Rfa {
 			}
 			else if (session_config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL))
 			{
-				value = "SSLED";
+				value = "SSL";
 				staging.addVariable (this.fixRfaStringPath (name), value);
 
 				name = "/Connections/" + connection_name + "/userName";
@@ -95,6 +95,17 @@ public class Rfa {
 					}
 				}
 				value = username.toString();
+				staging.addVariable (this.fixRfaStringPath (name), value);
+
+/* Enable dictionary download */
+				name = "/Connections/" + connection_name + "/downloadDataDict";
+				value = "True";
+				staging.addVariable (this.fixRfaStringPath (name), value);
+/* Disable client side DACS usage */
+				name = "/Connections/" + connection_name + "/dacs_CbeEnabled";
+				value = "False";
+				staging.addVariable (this.fixRfaStringPath (name), value);
+				name = "/Connections/" + connection_name + "/dacs_SbeSubEnabled";
 				staging.addVariable (this.fixRfaStringPath (name), value);
 			}
 			else

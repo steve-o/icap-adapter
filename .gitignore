@@ -1,0 +1,6 @@
+*.jar
+*.swp
+example.*
+idn_rdf.*
+symbols.txt
+target/

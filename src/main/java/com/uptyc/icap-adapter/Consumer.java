@@ -31,12 +31,24 @@ import com.reuters.rfa.omm.OMMTypes;
 import com.reuters.rfa.rdm.RDMInstrument;
 import com.reuters.rfa.rdm.RDMMsgTypes;
 import com.reuters.rfa.rdm.RDMService;
+import com.reuters.rfa.session.event.ConnectionEvent;
+import com.reuters.rfa.session.event.EntitlementsAuthenticationEvent;
+import com.reuters.rfa.session.event.MarketDataItemEvent;
+import com.reuters.rfa.session.event.MarketDataSvcEvent;
 import com.reuters.rfa.session.Session;
+import com.reuters.rfa.session.MarketDataEnums;
+import com.reuters.rfa.session.MarketDataItemSub;
+import com.reuters.rfa.session.MarketDataSubscriber;
+import com.reuters.rfa.session.MarketDataSubscriberInterestSpec;
 import com.reuters.rfa.session.omm.OMMConnectionEvent;
 import com.reuters.rfa.session.omm.OMMConnectionIntSpec;
 import com.reuters.rfa.session.omm.OMMConsumer;
+import com.reuters.rfa.session.omm.OMMErrorIntSpec;
 import com.reuters.rfa.session.omm.OMMItemEvent;
 import com.reuters.rfa.session.omm.OMMItemIntSpec;
+import com.reuters.tibmsg.TibException;
+import com.reuters.tibmsg.TibField;
+import com.reuters.tibmsg.TibMsg;
 import com.thomsonreuters.rfa.valueadd.domainrep.rdm.dictionary.RDMDictionary;
 import com.thomsonreuters.rfa.valueadd.domainrep.rdm.dictionary.RDMDictionaryCache;
 import com.thomsonreuters.rfa.valueadd.domainrep.rdm.dictionary.RDMDictionaryRequest;
@@ -72,6 +84,11 @@ public class Consumer implements Client {
         private OMMPool omm_pool;
 	private OMMEncoder omm_encoder;
 
+/* RFA market data subscriber interface. */
+	private MarketDataSubscriber market_data_subscriber;
+	private TibMsg msg;
+	private TibField field;
+
 /* Data dictionaries. */
 	private RDMDictionaryCache rdm_dictionary;
 
@@ -79,6 +96,7 @@ public class Consumer implements Client {
 	private Map<String, ItemStream> directory;
 
 /* RFA Item event consumer */
+	private Handle error_handle;
 	private Handle login_handle;
 	private Handle directory_handle;
 
@@ -152,6 +170,12 @@ public class Consumer implements Client {
 			this.omm_consumer = (OMMConsumer)this.session.createEventSource (EventSource.OMM_CONSUMER,
 						this.config.getConsumerName(),
 						false /* complete events */);
+
+/* Registering for Events from an OMM Consumer. */
+			LOG.info ("Registering OMM error interest.");
+			OMMErrorIntSpec ommErrorIntSpec = new OMMErrorIntSpec();
+			this.error_handle = this.omm_consumer.registerClient (this.event_queue, ommErrorIntSpec, this, null);
+
 /* OMM memory management. */
 			this.omm_pool = OMMPool.create();
 			this.omm_encoder = this.omm_pool.acquireEncoder();
@@ -165,6 +189,21 @@ public class Consumer implements Client {
 		else if (this.config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL))
 		{
 /* Initializing a Market Data Subscriber. */
+			LOG.info ("Creating market data subscriber.");
+			this.market_data_subscriber = (MarketDataSubscriber)this.session.createEventSource (EventSource.MARKET_DATA_SUBSCRIBER,
+						this.config.getConsumerName(),
+						false /* complete events */);
+
+			LOG.info ("Registering market data status interest.");
+			MarketDataSubscriberInterestSpec marketDataSubscriberInterestSpec = new MarketDataSubscriberInterestSpec();
+			marketDataSubscriberInterestSpec.setMarketDataSvcInterest (true);
+			marketDataSubscriberInterestSpec.setConnectionInterest (false);
+			marketDataSubscriberInterestSpec.setEntitlementsInterest (false);
+			this.error_handle = this.market_data_subscriber.registerClient (this.event_queue, marketDataSubscriberInterestSpec, this, null);
+
+/* TibMsg memory management. */
+			this.msg = new TibMsg();
+			this.field = new TibField();
 		}
 		else
 		{
@@ -190,7 +229,10 @@ public class Consumer implements Client {
 		key.append ('.');
 		key.append (instrument.getName());
 		if (!this.is_muted) {
-			this.sendItemRequest (item_stream);
+			if (this.config.getProtocol().equalsIgnoreCase (RSSL_PROTOCOL))
+				this.sendItemRequest (item_stream);
+			else if (this.config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL))
+				this.addSubscription (item_stream);
 		}
 		this.directory.put (key.toString(), item_stream);
 		LOG.info ("Directory size: {}", this.directory.size());
@@ -209,6 +251,18 @@ public class Consumer implements Client {
 					this.sendItemRequest (item_stream);
 			}
 		}
+		else if (this.config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL))
+		{
+			if (null == this.market_data_subscriber) {
+				LOG.warn ("Resubscribe whilst subscriber is invalid.");
+				return;
+			}
+
+			for (ItemStream item_stream : this.directory.values()) {
+				if (!item_stream.hasItemHandle())
+					this.addSubscription (item_stream);
+			}
+		}
 	}
 
 	private void sendItemRequest (ItemStream item_stream) {
@@ -225,6 +279,14 @@ public class Consumer implements Client {
 		ommItemIntSpec.setMsg (msg);
 		item_stream.setItemHandle (this.omm_consumer.registerClient (this.event_queue, ommItemIntSpec, this, null));
 		this.omm_pool.releaseMsg (msg);
+	}
+
+	private void addSubscription (ItemStream item_stream) {
+		LOG.info ("Adding market data subscription.");
+		MarketDataItemSub marketDataItemSub = new MarketDataItemSub();
+		marketDataItemSub.setServiceName (item_stream.getServiceName());
+		marketDataItemSub.setItemName (item_stream.getItemName());
+		this.market_data_subscriber.subscribe (this.event_queue, marketDataItemSub, this, null);
 	}
 
 /* Making a Login Request
@@ -345,6 +407,22 @@ public class Consumer implements Client {
 
 		case Event.OMM_CONNECTION_EVENT:
 			this.OnConnectionEvent ((OMMConnectionEvent)event);
+			break;
+
+		case Event.MARKET_DATA_ITEM_EVENT:
+			this.OnMarketDataItemEvent ((MarketDataItemEvent)event);
+			break;
+
+		case Event.MARKET_DATA_SVC_EVENT:
+			this.OnMarketDataSvcEvent ((MarketDataSvcEvent)event);
+			break;
+
+		case Event.CONNECTION_EVENT:
+			this.OnConnectionEvent ((ConnectionEvent)event);
+			break;
+
+		case Event.ENTITLEMENTS_AUTHENTICATION_EVENT:
+			this.OnEntitlementsAuthenticationEvent ((EntitlementsAuthenticationEvent)event);
 			break;
 
 		default:
@@ -481,7 +559,8 @@ LOG.info ("OnDirectoryResponse: {}", msg);
 			}
 		} */
 
-/* WORKAROUND: request each listed "used" dictionaries.
+/* WORKAROUND: request each listed "used" dictionaries.  Assumes that the provider
+ * or connected infrastructure will provide the dictionaries.
  */
 		if ((OMMMsg.MsgType.REFRESH_RESP == msg.getMsgType()
 			|| OMMMsg.MsgType.UPDATE_RESP == msg.getMsgType())
@@ -611,6 +690,143 @@ LOG.info ("OnDictionaryResponse: {}", msg);
 
 	private void OnConnectionEvent (OMMConnectionEvent event) {
 LOG.info ("OnConnectionEvent: {}", event);
+	}
+
+	private void OnMarketDataItemEvent (MarketDataItemEvent event) {
+LOG.info ("OnMarketDataItemEvent: {}", event);
+/* strings in switch are not supported in -source 1.6 */
+		if (MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()
+			|| MarketDataItemEvent.UPDATE == event.getMarketDataMsgType()) {
+		}
+		else if (MarketDataItemEvent.UNSOLICITED_IMAGE == event.getMarketDataMsgType()) {
+			LOG.warn ("Ignoring unsolicited image");
+			return;
+		}
+		else if (MarketDataItemEvent.STATUS == event.getMarketDataMsgType()) {
+			LOG.warn ("Ignoring status");
+			return;
+		}
+		else if (MarketDataItemEvent.CORRECTION == event.getMarketDataMsgType()) {
+			LOG.warn ("Ignoring correction");
+			return;
+		}
+		else if (MarketDataItemEvent.CLOSING_RUN == event.getMarketDataMsgType()) {
+			LOG.warn ("Ignoring closing run");
+			return;
+		}
+		else if (MarketDataItemEvent.RENAME == event.getMarketDataMsgType()) {
+			LOG.warn ("Ignoring rename");
+			return;
+		}
+		else if (MarketDataItemEvent.PERMISSION_DATA == event.getMarketDataMsgType()) {
+			LOG.warn ("Ignoring permission data");
+			return;
+		}
+/* GROUP_CHANGE is deprecated */
+		else {
+			LOG.warn ("Unhandled market data message type ({})", event.getMarketDataMsgType());
+			return;
+		}
+
+		if (MarketDataEnums.DataFormat.MARKETFEED != event.getDataFormat()) {
+			StringBuilder format = new StringBuilder();
+			switch (event.getDataFormat()) {
+			case MarketDataEnums.DataFormat.UNKNOWN:
+				format.append ("Unknown");
+				break;
+			case MarketDataEnums.DataFormat.ANSI_PAGE:
+				format.append ("ANSI_Page");
+				break;
+			case MarketDataEnums.DataFormat.MARKETFEED:
+				format.append ("Marketfeed");
+				break;
+			case MarketDataEnums.DataFormat.QFORM:
+				format.append ("QForm");
+				break;
+/* TibMsg self-describing */
+			case MarketDataEnums.DataFormat.TIBMSG:
+				format.append ("TibMsg");
+				break;
+			case MarketDataEnums.DataFormat.IFORM:
+			default:
+				format.append (event.getDataFormat());
+				break;
+			}
+
+			LOG.warn ("Unsupported data format ({}) in market data item event.", format.toString());
+			return;
+		}
+
+		final byte[] data = event.getData();
+		final int length = (data != null ? data.length : 0);
+
+		if (0 == length)
+			return;
+
+		try {
+			this.msg.ReUse();
+			this.field.ReUse();
+			this.msg.UnPack (data);
+			for (int status = this.field.First(msg);
+				TibMsg.TIBMSG_OK == status;
+				status = this.field.Next())
+			{
+				StringBuilder out = new StringBuilder (this.field.Name());
+				out.append (": ");
+				out.append (this.field.StringData());
+				LOG.info (out.toString());
+			}
+		} catch (TibException e) {
+			LOG.warn ("Unable to unpack data with TibMsg.");
+		}
+	}
+
+	private void OnMarketDataSvcEvent (MarketDataSvcEvent event) {
+LOG.info ("OnMarketDataSvcEvent: {}", event);
+		if (event.getServiceName().equals (this.config.getServiceName())
+			&& MarketDataSvcStatus.UP == event.getStatus().getState()
+			&& this.is_muted)
+		{
+			this.is_muted = false;
+			this.resubscribe();
+		}
+	}
+
+/* For manual processing of incoming data dictionaries from SSLED.
+ */
+	private void OnMarketDataDictEvent (MarketDataDictEvent event) {
+Log.info ("OnMarketDataDictEvent: {}", event);
+		if (MarketDataDictStatus.OK != event.getStatus().getState()) {
+			LOG.warn ("Data dictionary request failed: {}", event.getStatus().getStatusText());
+			return;
+		}
+		if (DataDictInfo.MARKETFEED != event.getDataDictInfo().getDictType()) {
+			LOG.warn ("Received non-Marketfeed data dictionary.");
+			return;
+		}
+
+		byte[] data = event.getData();
+		final int length = (data != null ? data.length : 0);
+
+		if (0 == length)
+			return;
+
+		try {
+			this.msg.ReUse();
+			this.msg.UnPack (data);
+			TibMsg.UnPackMfeedDictionary (this.msg);
+			LOG.info ("Dictionary unpacked.");
+		} catch (TibException e) {
+			LOG.warn ("Unable to unpack data dictionary with TibMsg.");
+		}
+	}
+
+	private void OnConnectionEvent (ConnectionEvent event) {
+LOG.info ("OnConnectionEvent: {}", event);
+	}
+
+	private void OnEntitlementsAuthenticationEvent (EntitlementsAuthenticationEvent event) {
+LOG.info ("OnEntitlementsAuthenticationEvent: {}", event);
 	}
 }
 
