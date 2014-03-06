@@ -6,6 +6,8 @@ package com.uptyc.IcapAdapter;
 import java.util.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.Marker;
+import org.apache.logging.log4j.MarkerManager;
 import com.google.common.base.Joiner;
 import com.reuters.rfa.common.Client;
 import com.reuters.rfa.common.Context;
@@ -68,6 +70,7 @@ import com.thomsonreuters.rfa.valueadd.domainrep.rdm.login.RDMLoginResponse;
 
 public class Consumer implements Client {
 	private static Logger LOG = LogManager.getLogger (Consumer.class.getName());
+	private static final Marker ICAP_MARKER = MarkerManager.getMarker ("ICAP");
 
 	private SessionConfig config;
 
@@ -225,6 +228,8 @@ public class Consumer implements Client {
 		LOG.info ("Creating item stream for RIC \"{}\" on service \"{}\".", instrument.getName(), instrument.getService());
 		item_stream.setItemName (instrument.getName());
 		item_stream.setServiceName (instrument.getService());
+/* viewType:- RDMUser.View.FIELD_ID_LIST or RDMUser.View.ELEMENT_NAME_LIST */
+		item_stream.setView (instrument.getFields());
 
 		StringBuilder key = new StringBuilder (instrument.getService());
 		key.append ('.');
@@ -278,7 +283,7 @@ public class Consumer implements Client {
 		LOG.info ("Registering OMM item interest for MMT_MARKET_PRICE");
 		OMMItemIntSpec ommItemIntSpec = new OMMItemIntSpec();
 		ommItemIntSpec.setMsg (msg);
-		item_stream.setItemHandle (this.omm_consumer.registerClient (this.event_queue, ommItemIntSpec, this, null));
+		item_stream.setItemHandle (this.omm_consumer.registerClient (this.event_queue, ommItemIntSpec, this, item_stream));
 		this.omm_pool.releaseMsg (msg);
 	}
 
@@ -287,7 +292,7 @@ public class Consumer implements Client {
 		MarketDataItemSub marketDataItemSub = new MarketDataItemSub();
 		marketDataItemSub.setServiceName (item_stream.getServiceName());
 		marketDataItemSub.setItemName (item_stream.getItemName());
-		this.market_data_subscriber.subscribe (this.event_queue, marketDataItemSub, this, null);
+		this.market_data_subscriber.subscribe (this.event_queue, marketDataItemSub, this, item_stream);
 	}
 
 /* Making a Login Request
@@ -694,6 +699,7 @@ LOG.info ("OnConnectionEvent: {}", event);
 	}
 
 	private void OnMarketDataItemEvent (MarketDataItemEvent event) {
+		final long now = System.currentTimeMillis();
 LOG.info ("OnMarketDataItemEvent: {}", event);
 /* strings in switch are not supported in -source 1.6 */
 		if (MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()
@@ -777,6 +783,23 @@ LOG.info ("OnMarketDataItemEvent: {}", event);
 				out.append (this.field.StringData());
 				LOG.info (out.toString());
 			}
+
+/* ICAP output here */
+			final ItemStream item_stream = (ItemStream)event.getClosure();
+			StringBuilder icap = new StringBuilder();
+			icap
+				.append (item_stream.getServiceName())
+				.append (',')
+				.append (item_stream.getItemName())
+				.append (',')
+				.append (new java.sql.Timestamp (now));
+			for (String field : item_stream.getView()) {
+LOG.info ("extract {}", field);
+				icap.append (',')
+					.append (this.msg.Get (field).StringData());
+			}
+			LOG.info (ICAP_MARKER, icap.toString());
+
 		} catch (TibException e) {
 			LOG.warn ("Unable to unpack data with TibMsg.");
 		}

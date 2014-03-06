@@ -33,7 +33,6 @@ public class IcapAdapter {
 	private Consumer consumer;
 
 /* Instrument list. */
-	private Instrument[] instruments;
 	private List<ItemStream> streams;
 
 	private static Logger LOG = LogManager.getLogger (IcapAdapter.class.getName());
@@ -182,11 +181,12 @@ public class IcapAdapter {
 		}
 
 /* Symbol list. */
+		List<Instrument> instruments = new ArrayList<Instrument> ();
+
 		if (line.hasOption (SYMBOL_PATH_OPTION)) {
 			this.config.setSymbolPath (line.getOptionValue (SYMBOL_PATH_OPTION));
 			File symbol_path = new File (this.config.getSymbolPath());
 			if (symbol_path.canRead()) {
-				List<Instrument> instruments = new ArrayList<Instrument> ();
 				Scanner line_scanner = new Scanner (symbol_path);
 				try {
 					while (line_scanner.hasNextLine()) {
@@ -211,8 +211,7 @@ public class IcapAdapter {
 				} finally {
 					line_scanner.close();
 				}
-				this.instruments = instruments.toArray (new Instrument[instruments.size()]);
-				LOG.info ("Read {} symbols from {}.", this.instruments.length, symbol_path);
+				LOG.info ("Read {} symbols from {}.", instruments.size(), symbol_path);
 			}
 		}
 
@@ -232,8 +231,8 @@ public class IcapAdapter {
 		this.consumer.init();
 
 /* Create state for subscribed RIC. */
-		this.streams = new ArrayList<ItemStream> (this.instruments.length);
-		for (Instrument instrument : this.instruments) {
+		this.streams = new ArrayList<ItemStream> (instruments.size());
+		for (Instrument instrument : instruments) {
 			ItemStream stream = new ItemStream();
 			this.consumer.createItemStream (instrument, stream);
 			this.streams.add (stream);

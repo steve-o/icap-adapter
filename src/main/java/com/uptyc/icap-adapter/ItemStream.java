@@ -12,6 +12,9 @@ public class ItemStream {
 /* Service origin, e.g. IDN_RDF */
 	private String service_name;
 
+/* Pseudo-view parameter, an array of field names */
+	private String[] view;
+
 /* Subscription handle which is valid from login success to login close. */
 	private Handle item_handle;
 
@@ -35,6 +38,14 @@ public class ItemStream {
 
 	public void setServiceName (String service_name) {
 		this.service_name = service_name;
+	}
+
+	public String[] getView() {
+		return this.view;
+	}
+
+	public void setView (String[] view) {
+		this.view = view;
 	}
 
 	public Handle getItemHandle() {
