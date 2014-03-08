@@ -808,8 +808,9 @@ public class Consumer implements Client {
 
 	private void OnMarketDataSvcEvent (MarketDataSvcEvent event) {
 		LOG.trace ("OnMarketDataSvcEvent: {}", event);
-		if (event.getServiceName().equals (this.config.getServiceName())
-			&& MarketDataSvcStatus.UP == event.getStatus().getState()
+/* Wait for any service to be up instead of one named service */
+		if (/* event.getServiceName().equals (this.config.getServiceName())
+			&& */ MarketDataSvcStatus.UP == event.getStatus().getState()
 			&& this.is_muted)
 		{
 			this.is_muted = false;
