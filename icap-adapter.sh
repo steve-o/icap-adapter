@@ -8,10 +8,11 @@ GUAVA=guava-16.0.1.jar
 
 # Apache LOG4J2 and friends
 # per http://logging.apache.org/log4j/2.x/faq.html#which_jars
-JAVAUTILLOGGINGAPI=jul-to-slf4j-1.6.2.jar
+JAVAUTILLOGGINGAPI=jul-to-slf4j-1.7.6.jar
 SLF4JAPI=slf4j-api-1.7.6.jar
 SLF4JBINDING=log4j-slf4j-impl-2.0-rc1.jar
 LOG4J2=log4j-api-2.0-rc1.jar:log4j-core-2.0-rc1.jar:$SLF4JBINDING:$SLF4JAPI:$JAVAUTILLOGGINGAPI
+##LOG4J2=log4j-api-2.0-rc1.jar:log4j-core-2.0-rc1.jar
 
 # Thomson Reuters RFA and ValueAdd libraries
 RFA6=rfa.java6.jar

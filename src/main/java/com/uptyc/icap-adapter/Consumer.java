@@ -156,27 +156,27 @@ public class Consumer implements Client {
 	}
 
 	public void init() throws Exception {
-		LOG.info ("{}", this.config);
+		LOG.trace (this.config);
 /* Configuring the session layer package.
  */
-		LOG.info ("Acquiring RFA session.");
+		LOG.trace ("Acquiring RFA session.");
 		this.session = Session.acquire (this.config.getSessionName());
 
 /* RFA Version Info. The version is only available if an application
  * has acquired a Session (i.e., the Session Layer library is laoded).
  */
-		LOG.info ("RFA: { \"productVersion\": \"{}\" }", Context.getRFAVersionInfo().getProductVersion());
+		LOG.debug ("RFA: { \"productVersion\": \"{}\" }", Context.getRFAVersionInfo().getProductVersion());
 
 		if (this.config.getProtocol().equalsIgnoreCase (RSSL_PROTOCOL))
 		{
 /* Initializing an OMM consumer. */
-			LOG.info ("Creating OMM consumer.");
+			LOG.trace ("Creating OMM consumer.");
 			this.omm_consumer = (OMMConsumer)this.session.createEventSource (EventSource.OMM_CONSUMER,
 						this.config.getConsumerName(),
 						false /* complete events */);
 
 /* Registering for Events from an OMM Consumer. */
-			LOG.info ("Registering OMM error interest.");
+			LOG.trace ("Registering OMM error interest.");
 			OMMErrorIntSpec ommErrorIntSpec = new OMMErrorIntSpec();
 			this.error_handle = this.omm_consumer.registerClient (this.event_queue, ommErrorIntSpec, this, null);
 
@@ -193,12 +193,12 @@ public class Consumer implements Client {
 		else if (this.config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL))
 		{
 /* Initializing a Market Data Subscriber. */
-			LOG.info ("Creating market data subscriber.");
+			LOG.trace ("Creating market data subscriber.");
 			this.market_data_subscriber = (MarketDataSubscriber)this.session.createEventSource (EventSource.MARKET_DATA_SUBSCRIBER,
 						this.config.getConsumerName(),
 						false /* complete events */);
 
-			LOG.info ("Registering market data status interest.");
+			LOG.trace ("Registering market data status interest.");
 			MarketDataSubscriberInterestSpec marketDataSubscriberInterestSpec = new MarketDataSubscriberInterestSpec();
 			marketDataSubscriberInterestSpec.setMarketDataSvcInterest (true);
 			marketDataSubscriberInterestSpec.setConnectionInterest (false);
@@ -225,7 +225,7 @@ public class Consumer implements Client {
  * the provider state on behalf of the application.
  */
 	public void createItemStream (Instrument instrument, ItemStream item_stream) {
-		LOG.info ("Creating item stream for RIC \"{}\" on service \"{}\".", instrument.getName(), instrument.getService());
+		LOG.trace ("Creating item stream for RIC \"{}\" on service \"{}\".", instrument.getName(), instrument.getService());
 		item_stream.setItemName (instrument.getName());
 		item_stream.setServiceName (instrument.getService());
 /* viewType:- RDMUser.View.FIELD_ID_LIST or RDMUser.View.ELEMENT_NAME_LIST */
@@ -241,7 +241,7 @@ public class Consumer implements Client {
 				this.addSubscription (item_stream);
 		}
 		this.directory.put (key.toString(), item_stream);
-		LOG.info ("Directory size: {}", this.directory.size());
+		LOG.trace ("Directory size: {}", this.directory.size());
 	}
 
 	public void resubscribe() {
@@ -272,7 +272,7 @@ public class Consumer implements Client {
 	}
 
 	private void sendItemRequest (ItemStream item_stream) {
-		LOG.info ("Sending market price request.");
+		LOG.trace ("Sending market price request.");
 		OMMMsg msg = this.omm_pool.acquireMsg();
 		msg.setMsgType (OMMMsg.MsgType.REQUEST);
 		msg.setMsgModelType (RDMMsgTypes.MARKET_PRICE);
@@ -280,7 +280,7 @@ public class Consumer implements Client {
 		msg.setIndicationFlags (OMMMsg.Indication.REFRESH);
 		msg.setAttribInfo (item_stream.getServiceName(), item_stream.getItemName(), RDMInstrument.NameType.RIC);
 
-		LOG.info ("Registering OMM item interest for MMT_MARKET_PRICE");
+		LOG.trace ("Registering OMM item interest for MMT_MARKET_PRICE.");
 		OMMItemIntSpec ommItemIntSpec = new OMMItemIntSpec();
 		ommItemIntSpec.setMsg (msg);
 		item_stream.setItemHandle (this.omm_consumer.registerClient (this.event_queue, ommItemIntSpec, this, item_stream));
@@ -288,7 +288,7 @@ public class Consumer implements Client {
 	}
 
 	private void addSubscription (ItemStream item_stream) {
-		LOG.info ("Adding market data subscription.");
+		LOG.trace ("Adding market data subscription.");
 		MarketDataItemSub marketDataItemSub = new MarketDataItemSub();
 		marketDataItemSub.setServiceName (item_stream.getServiceName());
 		marketDataItemSub.setItemName (item_stream.getItemName());
@@ -300,7 +300,7 @@ public class Consumer implements Client {
  * interactive provider applications.
  */
 	private void sendLoginRequest() {
-		LOG.info ("Sending login request.");
+		LOG.trace ("Sending login request.");
 		RDMLoginRequest request = new RDMLoginRequest();
 		RDMLoginRequestAttrib attribInfo = new RDMLoginRequestAttrib();
 
@@ -334,7 +334,7 @@ public class Consumer implements Client {
 
 		request.setAttrib (attribInfo);
 
-		LOG.info ("Registering OMM item interest for MMT_LOGIN.");
+		LOG.trace ("Registering OMM item interest for MMT_LOGIN.");
 		OMMMsg msg = request.getMsg (this.omm_pool);
 		OMMItemIntSpec ommItemIntSpec = new OMMItemIntSpec();
 		ommItemIntSpec.setMsg (msg);
@@ -348,7 +348,7 @@ public class Consumer implements Client {
 /* Make a directory request to see if we can ask for a dictionary.
  */
 	private void sendDirectoryRequest() {
-		LOG.info ("Sending directory request.");
+		LOG.trace ("Sending directory request.");
 		RDMDirectoryRequest request = new RDMDirectoryRequest();
 		RDMDirectoryRequestAttrib attribInfo = new RDMDirectoryRequestAttrib();
 
@@ -365,7 +365,7 @@ public class Consumer implements Client {
 
 		request.setAttrib (attribInfo);
 
-		LOG.info ("Registering OMM item interest for MMT_DIRECTORY.");
+		LOG.trace ("Registering OMM item interest for MMT_DIRECTORY.");
 		OMMMsg msg = request.getMsg (this.omm_pool);
 		OMMItemIntSpec ommItemIntSpec = new OMMItemIntSpec();
 		ommItemIntSpec.setMsg (msg);
@@ -379,7 +379,7 @@ public class Consumer implements Client {
  * (Section 2.2) response message of a Dictionary is received.
  */
 	private void sendDictionaryRequest (String dictionary_name) {
-		LOG.info ("Sending dictionary request for \"{}\".", dictionary_name);
+		LOG.trace ("Sending dictionary request for \"{}\".", dictionary_name);
 		RDMDictionaryRequest request = new RDMDictionaryRequest();
 		RDMDictionaryRequestAttrib attribInfo = new RDMDictionaryRequestAttrib();
 
@@ -395,7 +395,7 @@ public class Consumer implements Client {
 
 		request.setAttrib (attribInfo);
 
-		LOG.info ("Registering OMM item interest for MMT_DICTIONARY/{}.", dictionary_name);
+		LOG.trace ("Registering OMM item interest for MMT_DICTIONARY/{}.", dictionary_name);
 		OMMMsg msg = request.getMsg (this.omm_pool);
 		OMMItemIntSpec ommItemIntSpec = new OMMItemIntSpec();
 		ommItemIntSpec.setMsg (msg);
@@ -405,7 +405,7 @@ public class Consumer implements Client {
 
 	@Override
 	public void processEvent (Event event) {
-		LOG.info ("{}", event);
+		LOG.trace (event);
 		switch (event.getType()) {
 		case Event.OMM_ITEM_EVENT:
 			this.OnOMMItemEvent ((OMMItemEvent)event);
@@ -432,7 +432,7 @@ public class Consumer implements Client {
 			break;
 
 		default:
-			LOG.warn ("Uncaught: {}", event);
+			LOG.trace ("Uncaught: {}", event);
 			break;
 		}
 	}
@@ -440,7 +440,7 @@ public class Consumer implements Client {
 /* Handling Item Events, message types are munged c.f. C++ API.
  */
 	private void OnOMMItemEvent (OMMItemEvent event) {
-LOG.info ("OnOMMItemEvent: {}", event);
+		LOG.trace ("OnOMMItemEvent: {}", event);
 		final OMMMsg msg = event.getMsg();
 
 /* Verify event is a response event. */
@@ -459,13 +459,13 @@ LOG.info ("OnOMMItemEvent: {}", event);
 /* Post message */
 		case OMMMsg.MsgType.POST:
 		default:
-			LOG.warn ("Uncaught: {}", msg);
+			LOG.trace ("Uncaught: {}", msg);
 			break;
 		}
 	}
 
 	private void OnRespMsg (OMMMsg msg, Handle handle, Object closure) {
-LOG.info ("OnRespMsg: {}", msg);
+		LOG.trace ("OnRespMsg: {}", msg);
 		switch (msg.getMsgModelType()) {
 		case RDMMsgTypes.LOGIN:
 			this.OnLoginResponse (msg);
@@ -484,13 +484,13 @@ LOG.info ("OnRespMsg: {}", msg);
 			break;
 
 		default:
-			LOG.warn ("Uncaught: {}", msg);
+			LOG.trace ("Uncaught: {}", msg);
 			break;
 		}
 	}
 
 	private void OnLoginResponse (OMMMsg msg) {
-LOG.info ("OnLoginResponse: {}", msg);
+		LOG.trace ("OnLoginResponse: {}", msg);
 		final RDMLoginResponse response = new RDMLoginResponse (msg);
 		final byte stream_state = response.getRespStatus().getStreamState();
 		final byte data_state   = response.getRespStatus().getDataState();
@@ -507,7 +507,7 @@ LOG.info ("OnLoginResponse: {}", msg);
 				break;
 
 			default:
-				LOG.warn ("Uncaught data state: {}", response);
+				LOG.trace ("Uncaught data state: {}", response);
 				break;
 			}
 			break;
@@ -517,7 +517,7 @@ LOG.info ("OnLoginResponse: {}", msg);
 			break;
 
 		default:
-			LOG.warn ("Uncaught stream state: {}", response);
+			LOG.trace ("Uncaught stream state: {}", response);
 			break;
 		}
 	}
@@ -525,29 +525,29 @@ LOG.info ("OnLoginResponse: {}", msg);
 /* Login Success.
  */
 	private void OnLoginSuccess (RDMLoginResponse response) {
-LOG.info ("OnLoginSuccess: {}", response);
-		LOG.info ("Unmuting consumer.");
+		LOG.trace ("OnLoginSuccess: {}", response);
+		LOG.trace ("Unmuting consumer.");
 		this.is_muted = false;
 	}
 
 /* Other Login States.
  */
 	private void OnLoginSuspect (RDMLoginResponse response) {
-LOG.info ("OnLoginSuspect: {}", response);
+		LOG.trace ("OnLoginSuspect: {}", response);
 		this.is_muted = true;
 	}
 
 /* Other Login States.
  */
 	private void OnLoginClosed (RDMLoginResponse response) {
-LOG.info ("OnLoginClosed: {}", response);
+		LOG.trace ("OnLoginClosed: {}", response);
 		this.is_muted = true;
 	}
 
 /* MMT_DIRECTORY domain.
  */
 	private void OnDirectoryResponse (OMMMsg msg) {
-LOG.info ("OnDirectoryResponse: {}", msg);
+		LOG.trace ("OnDirectoryResponse: {}", msg);
 //GenericOMMParser.parse (msg);
 //		final RDMDirectoryResponse response = new RDMDirectoryResponse (msg);
 /* Received */
@@ -558,7 +558,7 @@ LOG.info ("OnDirectoryResponse: {}", msg);
 				Iterator<Service> it = payload.getServiceList().iterator();
 				while (it.hasNext()) {
 					final Service service = it.next();
-					LOG.info ("Service: {}", service.getServiceName());
+					LOG.trace ("Service: {}", service.getServiceName());
 				}
 
 				this.pending_directory = false;
@@ -577,7 +577,7 @@ LOG.info ("OnDirectoryResponse: {}", msg);
 			for (Iterator<?> it = map.iterator(); it.hasNext();) {
 				final OMMMapEntry map_entry = (OMMMapEntry)it.next();
 				if (OMMTypes.FILTER_LIST != map_entry.getDataType()) {
-					LOG.info ("OMM map entry not a filter list.");
+					LOG.trace ("OMM map entry not a filter list.");
 					continue;
 				}
 				final OMMFilterList filter_list = (OMMFilterList)map_entry.getData();
@@ -591,12 +591,12 @@ LOG.info ("OnDirectoryResponse: {}", msg);
 					}
 				}
 				if (null == info_filter) {
-					LOG.info ("OMM filter list contains no INFO filter.");
+					LOG.trace ("OMM filter list contains no INFO filter.");
 					continue;
 				}
-				LOG.info ("OMM filter list contains INFO filter.");
+				LOG.trace ("OMM filter list contains INFO filter.");
 				if (null == info_filter || OMMTypes.ELEMENT_LIST != info_filter.getDataType()) {
-					LOG.info ("INFO filter is not an OMM element list.");
+					LOG.trace ("INFO filter is not an OMM element list.");
 					continue;
 				}
 				final OMMElementList element_list = (OMMElementList)info_filter.getData();
@@ -605,9 +605,9 @@ LOG.info ("OnDirectoryResponse: {}", msg);
 					final OMMData element_data = element_entry.getData();
 					if (!element_entry.getName().equals (com.reuters.rfa.rdm.RDMService.Info.DictionariesUsed))
 						continue;
-					LOG.info ("Found DictionariesUsed entry");
+					LOG.trace ("Found DictionariesUsed entry.");
 					if (OMMTypes.ARRAY != element_data.getType()) {
-						LOG.info ("DictionariesUsed not an OMM array");
+						LOG.trace ("DictionariesUsed not an OMM array.");
 						continue;
 					}
 					final OMMArray array = (OMMArray)element_data;
@@ -617,7 +617,7 @@ LOG.info ("OnDirectoryResponse: {}", msg);
 						final String dictionary_name = array_entry.getData().toString();
 						if (!this.dictionary_handle.containsKey (dictionary_name))
 							this.sendDictionaryRequest (dictionary_name);
-						LOG.info ("Used dictionary: {}", dictionary_name);
+						LOG.trace ("Used dictionary: {}", dictionary_name);
 					}
 				}
 			}
@@ -637,14 +637,14 @@ LOG.info ("OnDirectoryResponse: {}", msg);
  * responsibility to reissue the dictionary request.
  */
 	private void OnDictionaryResponse (OMMMsg msg, Handle handle, Object closure) {
-LOG.info ("OnDictionaryResponse: {}", msg);
+		LOG.trace ("OnDictionaryResponse: {}", msg);
 		final RDMDictionaryResponse response = new RDMDictionaryResponse (msg);
 /* Receiving dictionary */
 		if (response.getMessageType() == RDMDictionaryResponse.MessageType.REFRESH_RESP
 			&& response.hasPayload() && null != response.getPayload())
 		{
 			if (response.hasAttrib()) {
-				LOG.info ("Dictionary: {}", response.getAttrib().getDictionaryName());
+				LOG.trace ("Dictionary: {}", response.getAttrib().getDictionaryName());
 			}
 			this.rdm_dictionary.load (response.getPayload(), handle);
 		}
@@ -656,16 +656,16 @@ LOG.info ("OnDictionaryResponse: {}", msg);
 		if (response.getMessageType() == RDMDictionaryResponse.MessageType.REFRESH_RESP
 			&& response.getIndicationMask().contains (RDMDictionaryResponse.IndicationMask.REFRESH_COMPLETE))
 		{
-			LOG.info ("Dictionary complete.");
+			LOG.trace ("Dictionary complete.");
 /* Check dictionary version */
 			FieldDictionary field_dictionary = this.rdm_dictionary.getFieldDictionary();
 			if (RDMDictionary.DictionaryType.RWFFLD == dictionary_type)
 			{
-				LOG.info ("RDMFieldDictionary version: {}", field_dictionary.getFieldProperty ("Version"));
+				LOG.trace ("RDMFieldDictionary version: {}", field_dictionary.getFieldProperty ("Version"));
 			}
 			else if (RDMDictionary.DictionaryType.RWFENUM == dictionary_type)
 			{
-				LOG.info ("enumtype.def version: {}", field_dictionary.getEnumProperty ("Version"));
+				LOG.trace ("enumtype.def version: {}", field_dictionary.getEnumProperty ("Version"));
 			}
 			GenericOMMParser.initializeDictionary (field_dictionary);
 
@@ -678,11 +678,11 @@ LOG.info ("OnDictionaryResponse: {}", msg);
 					--pending_dictionaries;
 			}
 			if (0 == pending_dictionaries) {
-				LOG.info ("All used dictionaries loaded, resuming subscriptions.");
+				LOG.trace ("All used dictionaries loaded, resuming subscriptions.");
 				this.resubscribe();
 				this.pending_dictionary = false;
 			} else {
-				LOG.info ("Dictionaries pending: {}", pending_dictionaries);
+				LOG.trace ("Dictionaries pending: {}", pending_dictionaries);
 			}
 		}
 	}
@@ -695,43 +695,43 @@ LOG.info ("OnDictionaryResponse: {}", msg);
 
 
 	private void OnConnectionEvent (OMMConnectionEvent event) {
-LOG.info ("OnConnectionEvent: {}", event);
+		LOG.trace ("OnConnectionEvent: {}", event);
 	}
 
 	private void OnMarketDataItemEvent (MarketDataItemEvent event) {
 		final long now = System.currentTimeMillis();
-LOG.info ("OnMarketDataItemEvent: {}", event);
+		LOG.trace ("OnMarketDataItemEvent: {}", event);
 /* strings in switch are not supported in -source 1.6 */
 		if (MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()
 			|| MarketDataItemEvent.UPDATE == event.getMarketDataMsgType()) {
 		}
 		else if (MarketDataItemEvent.UNSOLICITED_IMAGE == event.getMarketDataMsgType()) {
-			LOG.warn ("Ignoring unsolicited image");
+			LOG.trace ("Ignoring unsolicited image.");
 			return;
 		}
 		else if (MarketDataItemEvent.STATUS == event.getMarketDataMsgType()) {
-			LOG.warn ("Ignoring status");
+			LOG.trace ("Ignoring status.");
 			return;
 		}
 		else if (MarketDataItemEvent.CORRECTION == event.getMarketDataMsgType()) {
-			LOG.warn ("Ignoring correction");
+			LOG.trace ("Ignoring correction.");
 			return;
 		}
 		else if (MarketDataItemEvent.CLOSING_RUN == event.getMarketDataMsgType()) {
-			LOG.warn ("Ignoring closing run");
+			LOG.trace ("Ignoring closing run.");
 			return;
 		}
 		else if (MarketDataItemEvent.RENAME == event.getMarketDataMsgType()) {
-			LOG.warn ("Ignoring rename");
+			LOG.trace ("Ignoring rename.");
 			return;
 		}
 		else if (MarketDataItemEvent.PERMISSION_DATA == event.getMarketDataMsgType()) {
-			LOG.warn ("Ignoring permission data");
+			LOG.trace ("Ignoring permission data.");
 			return;
 		}
 /* GROUP_CHANGE is deprecated */
 		else {
-			LOG.warn ("Unhandled market data message type ({})", event.getMarketDataMsgType());
+			LOG.trace ("Unhandled market data message type ({}).", event.getMarketDataMsgType());
 			return;
 		}
 
@@ -760,7 +760,7 @@ LOG.info ("OnMarketDataItemEvent: {}", event);
 				break;
 			}
 
-			LOG.warn ("Unsupported data format ({}) in market data item event.", format.toString());
+			LOG.trace ("Unsupported data format ({}) in market data item event.", format.toString());
 			return;
 		}
 
@@ -774,14 +774,16 @@ LOG.info ("OnMarketDataItemEvent: {}", event);
 			this.msg.ReUse();
 			this.field.ReUse();
 			this.msg.UnPack (data);
-			for (int status = this.field.First(msg);
-				TibMsg.TIBMSG_OK == status;
-				status = this.field.Next())
-			{
-				StringBuilder out = new StringBuilder (this.field.Name());
-				out.append (": ");
-				out.append (this.field.StringData());
-				LOG.info (out.toString());
+			if (LOG.isDebugEnabled()) {
+				for (int status = this.field.First(msg);
+					TibMsg.TIBMSG_OK == status;
+					status = this.field.Next())
+				{
+					StringBuilder out = new StringBuilder (this.field.Name());
+					out.append (": ");
+					out.append (this.field.StringData());
+					LOG.debug (out.toString());
+				}
 			}
 
 /* ICAP output here */
@@ -794,7 +796,6 @@ LOG.info ("OnMarketDataItemEvent: {}", event);
 				.append (',')
 				.append (new java.sql.Timestamp (now));
 			for (String field : item_stream.getView()) {
-LOG.info ("extract {}", field);
 				icap.append (',')
 					.append (this.msg.Get (field).StringData());
 			}
@@ -806,7 +807,7 @@ LOG.info ("extract {}", field);
 	}
 
 	private void OnMarketDataSvcEvent (MarketDataSvcEvent event) {
-LOG.info ("OnMarketDataSvcEvent: {}", event);
+		LOG.trace ("OnMarketDataSvcEvent: {}", event);
 		if (event.getServiceName().equals (this.config.getServiceName())
 			&& MarketDataSvcStatus.UP == event.getStatus().getState()
 			&& this.is_muted)
@@ -817,11 +818,11 @@ LOG.info ("OnMarketDataSvcEvent: {}", event);
 	}
 
 	private void OnConnectionEvent (ConnectionEvent event) {
-LOG.info ("OnConnectionEvent: {}", event);
+		LOG.trace ("OnConnectionEvent: {}", event);
 	}
 
 	private void OnEntitlementsAuthenticationEvent (EntitlementsAuthenticationEvent event) {
-LOG.info ("OnEntitlementsAuthenticationEvent: {}", event);
+		LOG.trace ("OnEntitlementsAuthenticationEvent: {}", event);
 	}
 }
 

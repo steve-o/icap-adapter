@@ -39,12 +39,12 @@ public class Rfa {
 	}
 
 	public void init() throws Exception {
-		LOG.info ("Initializing RFA.");
+		LOG.trace ("Initializing RFA.");
 		Context.initialize (null);
 
 /* Populate Config Database.
  */
-		LOG.info ("Populating RFA config database.");
+		LOG.trace ("Populating RFA config database.");
 		ConfigDb staging = new ConfigDb();
 
 		for (SessionConfig session_config : this.config.getSessions())
@@ -114,20 +114,20 @@ public class Rfa {
 			}
 		}
 
-		LOG.info ("Merging RFA config database with staging database.");
+		LOG.trace ("Merging RFA config database with staging database.");
 		this.rfa_config = staging;
 		Context.initialize (this.rfa_config);
 
 /* TODO: Java properties override */
 
 /* Dump effective Java properties configuration */
-		LOG.info ("Dumping configuration database:{}{}", LINE_SEPARATOR, this.rfa_config);
+		LOG.debug ("Dumping configuration database:{}{}", LINE_SEPARATOR, this.rfa_config);
 
-		LOG.info ("RFA initialization complete.");
+		LOG.trace ("RFA initialization complete.");
 	}
 
 	public void clear() {
-		LOG.info ("Closing RFA.");
+		LOG.trace ("Closing RFA.");
 		Context.uninitialize();
 	}
 }

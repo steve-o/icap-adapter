@@ -9,6 +9,7 @@ import java.net.*;
 import org.apache.commons.cli.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.slf4j.bridge.SLF4JBridgeHandler;
 import com.google.common.base.Joiner;
 import com.reuters.rfa.common.Context;
 import com.reuters.rfa.common.Dispatchable;
@@ -36,6 +37,7 @@ public class IcapAdapter {
 	private List<ItemStream> streams;
 
 	private static Logger LOG = LogManager.getLogger (IcapAdapter.class.getName());
+	private static Logger RFA_LOG = LogManager.getLogger ("com.reuters.rfa");
 
 	private static final String RSSL_PROTOCOL	= "rssl";
 	private static final String SSLED_PROTOCOL	= "ssled";
@@ -106,36 +108,36 @@ public class IcapAdapter {
 			List<SessionConfig> session_configs = new ArrayList<SessionConfig>();
 			if (!session.isEmpty()) {
 				SessionConfig session_config = new SessionConfig();
-				LOG.info ("session: {}", session);
+				LOG.debug ("session: {}", session);
 				final URI parsed = new URI (session);
 				if (!parsed.getScheme().isEmpty()) {
 					session_config.setProtocol (parsed.getScheme());
-					LOG.info ("protocol: {}", session_config.getProtocol());
+					LOG.debug ("protocol: {}", session_config.getProtocol());
 				}
 				if (!parsed.getUserInfo().isEmpty()) {
 					session_config.setUserName (parsed.getUserInfo());
-					LOG.info ("username: {}", session_config.getUserName());
+					LOG.debug ("username: {}", session_config.getUserName());
 				} else {
 					session_config.setUserName (System.getProperty ("user.name"));
-					LOG.info ("username: {} (default)", session_config.getUserName());
+					LOG.debug ("username: {} (default)", session_config.getUserName());
 				}
 				if (!parsed.getHost().isEmpty()) {
 					session_config.setServer (parsed.getHost());
-					LOG.info ("host: {}", session_config.getServer());
+					LOG.debug ("host: {}", session_config.getServer());
 				} else {
 					session_config.setServer ("localhost");
-					LOG.info ("host: localhost (default)");
+					LOG.debug ("host: localhost (default)");
 				}
 				if (0 != parsed.getPort()) {
 					session_config.setDefaultPort (Integer.toString (parsed.getPort()));
-					LOG.info ("port: {}", session_config.getDefaultPort());
+					LOG.debug ("port: {}", session_config.getDefaultPort());
 				} else {
-					LOG.info ("port: (default)");
+					LOG.debug ("port: (default)");
 				}
 				if (!parsed.getPath().isEmpty()) {
 					final File path = new File (parsed.getPath());
 					session_config.setServiceName (path.getName());
-					LOG.info ("service: {}", session_config.getServiceName());
+					LOG.debug ("service: {}", session_config.getServiceName());
 				}
 				if (!parsed.getQuery().isEmpty()) {
 /* For each key-value pair, i.e. ?a=x&b=y&c=z -> (a,x) (b,y) (c,z)
@@ -147,24 +149,24 @@ public class IcapAdapter {
 						server_list = query.get ("server-list");
 					if (null != application_id) {
 						session_config.setApplicationId (application_id);
-						LOG.info ("application-id: {}", session_config.getApplicationId());
+						LOG.debug ("application-id: {}", session_config.getApplicationId());
 					}
 					if (null != instance_id) {
 						session_config.setInstanceId (instance_id);
-						LOG.info ("instance-id: {}", session_config.getInstanceId());
+						LOG.debug ("instance-id: {}", session_config.getInstanceId());
 					}
 					if (null != position) {
 						session_config.setPosition (position);
-						LOG.info ("position: {}", session_config.getPosition());
+						LOG.debug ("position: {}", session_config.getPosition());
 					} else {
 						session_config.setPosition (InetAddress.getLocalHost().getHostAddress() + "/"
 							+ InetAddress.getLocalHost().getHostName());
-						LOG.info ("position: {} (default)", session_config.getPosition());
+						LOG.debug ("position: {} (default)", session_config.getPosition());
 					}
 					if (null != server_list) {
 						session_config.setServers (server_list.split (","));
 /* String.join() */
-						LOG.info ("server-list: {}", 
+						LOG.debug ("server-list: {}", 
 							Joiner.on (", ").join (session_config.getServers()));
 					}
 				}
@@ -205,17 +207,28 @@ public class IcapAdapter {
 						if (!fields.isEmpty()) {
 							Instrument new_instrument = new Instrument (service, symbol_name, fields.toArray (new String[fields.size()]));
 							instruments.add (new_instrument);
-							LOG.info ("symbol: {}", new_instrument);
+							LOG.trace ("symbol: {}", new_instrument);
 						}
 					}
 				} finally {
 					line_scanner.close();
 				}
-				LOG.info ("Read {} symbols from {}.", instruments.size(), symbol_path);
+				LOG.debug ("Read {} symbols from {}.", instruments.size(), symbol_path);
 			}
 		}
 
-		LOG.info ("{}", this.config);
+		LOG.debug (this.config.toString());
+
+/* RFA Logging. */
+// Remove existing handlers attached to j.u.l root logger
+		SLF4JBridgeHandler.removeHandlersForRootLogger();
+// add SLF4JBridgeHandler to j.u.l's root logger
+		SLF4JBridgeHandler.install();
+
+		if (RFA_LOG.isDebugEnabled()) {
+			java.util.logging.Logger rfa_logger = java.util.logging.Logger.getLogger ("com.reuters.rfa");
+			rfa_logger.setLevel (java.util.logging.Level.FINE);
+		}
 
 /* RFA Context. */
 		this.rfa = new Rfa (this.config);
@@ -236,7 +249,7 @@ public class IcapAdapter {
 			ItemStream stream = new ItemStream();
 			this.consumer.createItemStream (instrument, stream);
 			this.streams.add (stream);
-			LOG.info ("{}", instrument);
+			LOG.trace (instrument.toString());
 		}
 
 	}
