@@ -3,6 +3,7 @@
 
 package com.uptyc.IcapAdapter;
 
+import java.net.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.google.common.base.Joiner;
@@ -66,7 +67,7 @@ public class Rfa {
 			value = Joiner.on (",").join (session_config.getServers());
 			staging.addVariable (this.fixRfaStringPath (name), value);
 /* Default port */
-			if (!session_config.getDefaultPort().isEmpty()) {
+			if (session_config.hasDefaultPort()) {
 				name = "/Connections/" + connection_name + "/portNumber";
 				value = session_config.getDefaultPort();
 				staging.addVariable (this.fixRfaStringPath (name), value);
@@ -85,13 +86,25 @@ public class Rfa {
 				staging.addVariable (this.fixRfaStringPath (name), value);
 
 				name = "/Connections/" + connection_name + "/userName";
-				StringBuilder username = new StringBuilder (session_config.getUserName());
-				if (!session_config.getApplicationId().isEmpty()) {
+				StringBuilder username = new StringBuilder();
+				if (session_config.hasUserName()) {
+					username.append (session_config.getUserName());
+				} else {
+					username.append (System.getProperty ("user.name"));
+				}
+				if (session_config.hasApplicationId()) {
 					username.append ('+');
 					username.append (session_config.getApplicationId());
-					if (!session_config.getPosition().isEmpty()) {
+					if (session_config.hasPosition()) {
+						if (!session_config.getPosition().isEmpty()) {
+							username.append ('+');
+							username.append (session_config.getPosition());
+						}
+					} else {
 						username.append ('+');
-						username.append (session_config.getPosition());
+						username.append (InetAddress.getLocalHost().getHostAddress());
+						username.append ('/');
+						username.append (InetAddress.getLocalHost().getHostName());
 					}
 				}
 				value = username.toString();

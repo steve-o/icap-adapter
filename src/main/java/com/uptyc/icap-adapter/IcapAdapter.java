@@ -11,6 +11,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
+import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import com.reuters.rfa.common.Context;
 import com.reuters.rfa.common.Dispatchable;
 import com.reuters.rfa.common.DispatchException;
@@ -42,10 +46,19 @@ public class IcapAdapter {
 	private static final String RSSL_PROTOCOL	= "rssl";
 	private static final String SSLED_PROTOCOL	= "ssled";
 
+	private static final String SERVER_LIST_PARAM	= "server-list";
+	private static final String APPLICATION_ID_PARAM	= "application-id";
+	private static final String INSTANCE_ID_PARAM	= "instance-id";
+	private static final String POSITION_PARAM	= "position";
+
 	private static final String SESSION_OPTION	= "session";
 	private static final String SYMBOL_PATH_OPTION	= "symbol-path";
 	private static final String HELP_OPTION		= "help";
 	private static final String VERSION_OPTION	= "version";
+
+	private static final String SESSION_NAME	= "Session";
+	private static final String CONNECTION_NAME	= "Connection";
+	private static final String CONSUMER_NAME	= "Consumer";
 
 	private static Options buildOptions() {
 		Options opts = new Options();
@@ -85,11 +98,13 @@ public class IcapAdapter {
 
 	private static Map<String, String> parseQuery (String query) throws UnsupportedEncodingException {
 		final Map<String, String> query_pairs = new LinkedHashMap<String, String>();
-		final String[] pairs = query.split ("&");
-		for (String pair : pairs) {
-			int idx = pair.indexOf ("=");
-			query_pairs.put (URLDecoder.decode (pair.substring (0, idx), "UTF-8"),
-				URLDecoder.decode (pair.substring (idx + 1), "UTF-8"));
+		if (!Strings.isNullOrEmpty (query)) {
+			final String[] pairs = query.split ("&");
+			for (String pair : pairs) {
+				int idx = pair.indexOf ("=");
+				query_pairs.put (URLDecoder.decode (pair.substring (0, idx), "UTF-8"),
+					URLDecoder.decode (pair.substring (idx + 1), "UTF-8"));
+			}
 		}
 		return query_pairs;
 	}
@@ -106,78 +121,47 @@ public class IcapAdapter {
 		if (line.hasOption (SESSION_OPTION)) {
 			final String session = line.getOptionValue (SESSION_OPTION);
 			List<SessionConfig> session_configs = new ArrayList<SessionConfig>();
-			if (!session.isEmpty()) {
-				SessionConfig session_config = new SessionConfig();
-				LOG.debug ("session: {}", session);
+			if (!Strings.isNullOrEmpty (session)) {
+				LOG.debug ("Session declaration: {}", session);
 				final URI parsed = new URI (session);
-				if (!parsed.getScheme().isEmpty()) {
-					session_config.setProtocol (parsed.getScheme());
-					LOG.debug ("protocol: {}", session_config.getProtocol());
+/* For each key-value pair, i.e. ?a=x&b=y&c=z -> (a,x) (b,y) (c,z) */
+				final ImmutableMap<String, String> query = ImmutableMap.copyOf (this.parseQuery (parsed.getQuery()));
+
+/* Extract out required parameters */
+				final String protocol = parsed.getScheme();
+				final String server_list = query.get (SERVER_LIST_PARAM);
+				String[] servers = { parsed.getHost() };
+/* Override host in URL with server-list query parameter */
+				if (!Strings.isNullOrEmpty (server_list)) {
+					servers = Iterables.toArray (Splitter.on (',')
+							.trimResults()
+							.omitEmptyStrings()
+							.split (server_list), String.class);
 				}
-				if (!parsed.getUserInfo().isEmpty()) {
+
+/* Minimum parameters to construct session configuration */
+				SessionConfig session_config = new SessionConfig (SESSION_NAME, CONNECTION_NAME, CONSUMER_NAME, protocol, servers);
+
+/* Optional session parameters: */
+				if (!Strings.isNullOrEmpty (parsed.getUserInfo()))
 					session_config.setUserName (parsed.getUserInfo());
-					LOG.debug ("username: {}", session_config.getUserName());
-				} else {
-					session_config.setUserName (System.getProperty ("user.name"));
-					LOG.debug ("username: {} (default)", session_config.getUserName());
-				}
-				if (!parsed.getHost().isEmpty()) {
-					session_config.setServer (parsed.getHost());
-					LOG.debug ("host: {}", session_config.getServer());
-				} else {
-					session_config.setServer ("localhost");
-					LOG.debug ("host: localhost (default)");
-				}
-				if (0 != parsed.getPort()) {
+/* -1 if the port is undefined */
+				if (-1 != parsed.getPort()) 
 					session_config.setDefaultPort (Integer.toString (parsed.getPort()));
-					LOG.debug ("port: {}", session_config.getDefaultPort());
-				} else {
-					LOG.debug ("port: (default)");
-				}
-				if (!parsed.getPath().isEmpty()) {
-					final File path = new File (parsed.getPath());
-					session_config.setServiceName (path.getName());
-					LOG.debug ("service: {}", session_config.getServiceName());
-				}
-				if (!parsed.getQuery().isEmpty()) {
-/* For each key-value pair, i.e. ?a=x&b=y&c=z -> (a,x) (b,y) (c,z)
- */
-					Map<String, String> query = this.parseQuery (parsed.getQuery());
-					final String application_id = query.get ("application-id"),
-						instance_id = query.get ("instance-id"),
-						position = query.get ("position"),
-						server_list = query.get ("server-list");
-					if (null != application_id) {
-						session_config.setApplicationId (application_id);
-						LOG.debug ("application-id: {}", session_config.getApplicationId());
-					}
-					if (null != instance_id) {
-						session_config.setInstanceId (instance_id);
-						LOG.debug ("instance-id: {}", session_config.getInstanceId());
-					}
-					if (null != position) {
-						session_config.setPosition (position);
-						LOG.debug ("position: {}", session_config.getPosition());
-					} else {
-						session_config.setPosition (InetAddress.getLocalHost().getHostAddress() + "/"
-							+ InetAddress.getLocalHost().getHostName());
-						LOG.debug ("position: {} (default)", session_config.getPosition());
-					}
-					if (null != server_list) {
-						session_config.setServers (server_list.split (","));
-/* String.join() */
-						LOG.debug ("server-list: {}", 
-							Joiner.on (", ").join (session_config.getServers()));
-					}
-				}
-/* Boiler plate naming. */
-				session_config.setSessionName ("MySession");
-				session_config.setConnectionName ("MyConnection");
-				session_config.setConsumerName ("MyConsumer");
+				if (!Strings.isNullOrEmpty (parsed.getPath()))
+					session_config.setServiceName (new File (parsed.getPath()).getName());
+				if (query.containsKey (APPLICATION_ID_PARAM))
+					session_config.setApplicationId (query.get (APPLICATION_ID_PARAM));
+				if (query.containsKey (INSTANCE_ID_PARAM))
+					session_config.setInstanceId (query.get (INSTANCE_ID_PARAM));
+				if (query.containsKey (POSITION_PARAM))
+					session_config.setPosition (query.get (POSITION_PARAM));
+
+				LOG.debug ("Session evaluation: {}", session_config.toString());
 				session_configs.add (session_config);
 			}
 			if (!session_configs.isEmpty()) {
-				SessionConfig[] array = session_configs.toArray (new SessionConfig[session_configs.size()]);
+				final SessionConfig[] array = session_configs.toArray (new SessionConfig[session_configs.size()]);
 				this.config.setSessions (array);
 			}
 		}

@@ -3,6 +3,8 @@
 
 package com.uptyc.IcapAdapter;
 
+import com.google.common.base.Optional;
+
 public class SessionConfig {
 //  RFA session name, one session contains a horizontal scaling set of connections.
 	private String session_name;
@@ -16,20 +18,20 @@ public class SessionConfig {
 //  Protocol name, RSSL or SSL.
 	private String protocol;
 
-//  TREP-RT service name, e.g. IDN_RDF.
-	private String service_name;
-
 //  TREP-RT ADH hostname or IP address.
 	private String[] servers;
 
 //  Default TREP-RT R/SSL port, e.g. 14002, 14003, 8101.
-	private String default_port;
+	private Optional<String> default_port;
+
+//  TREP-RT service name, e.g. IDN_RDF.
+	private Optional<String> service_name;
 
 /* DACS application Id.  If the server authenticates with DACS, the consumer
  * application may be required to pass in a valid ApplicationId.
  * Range: "" (None) or 1-511 as an Ascii string.
  */
-	private String application_id;
+	private Optional<String> application_id;
 
 /* InstanceId is used to differentiate applications running on the same host.
  * If there is more than one noninteractive provider instance running on the
@@ -39,117 +41,122 @@ public class SessionConfig {
  * and cut the connection.
  * Range: "" (None) or any Ascii string, presumably to maximum RFA_String length.
  */
-	private String instance_id;
+	private Optional<String> instance_id;
 
 /* DACS username, frequently non-checked and set to similar: user1.
  */
-	private String user_name;
+	private Optional<String> user_name;
 
 /* DACS position, the station which the user is using.
  * Range: "" (None) or "<IPv4 address>/hostname" or "<IPv4 address>/net"
  */
-	private String position;
+	private Optional<String> position;
+
+	public SessionConfig (String session_name, String connection_name, String consumer_name, String protocol, String[] servers) {
+		this.session_name = session_name;
+		this.connection_name = connection_name;
+		this.consumer_name = consumer_name;
+		this.protocol = protocol;
+		this.servers = servers;
+		this.default_port = Optional.absent();
+		this.service_name = Optional.absent();
+		this.application_id = Optional.absent();
+		this.instance_id = Optional.absent();
+		this.user_name = Optional.absent();
+		this.position = Optional.absent();
+	}
 
 	public String getSessionName() {
 		return this.session_name;
-	}
-
-	public void setSessionName (String session_name) {
-		this.session_name = session_name;
 	}
 
 	public String getConnectionName() {
 		return this.connection_name;
 	}
 
-	public void setConnectionName (String connection_name) {
-		this.connection_name = connection_name;
-	}
-
 	public String getConsumerName() {
 		return this.consumer_name;
-	}
-
-	public void setConsumerName (String consumer_name) {
-		this.consumer_name = consumer_name;
 	}
 
 	public String getProtocol() {
 		return this.protocol;
 	}
 
-	public void setProtocol (String protocol) {
-		this.protocol = protocol;
-	}
-
-	public String getServiceName() {
-		return this.service_name;
-	}
-
-	public void setServiceName (String service_name) {
-		this.service_name = service_name;
-	}
-
 	public String[] getServers() {
 		return this.servers;
 	}
 
-	public void setServers (String[] servers) {
-		this.servers = servers;
-	}
-
-/* support for singular server */
-	public String getServer() {
-		return this.getServers()[0];
-	}
-
-	public void setServer (String server) {
-		String[] array = { server };
-		this.setServers (array);
+/* optional parameters */
+	public boolean hasDefaultPort() {
+		return this.default_port.isPresent();
 	}
 
 	public String getDefaultPort() {
-		return this.default_port;
+		return this.default_port.get();
 	}
 
 	public void setDefaultPort (String default_port) {
-		this.default_port = default_port;
+		this.default_port = Optional.of (default_port);
+	}
+
+	public boolean hasServiceName() {
+		return this.service_name.isPresent();
+	}
+
+	public String getServiceName() {
+		return this.service_name.get();
+	}
+
+	public void setServiceName (String service_name) {
+		this.service_name = Optional.of (service_name);
+	}
+
+	public boolean hasApplicationId() {
+		return this.application_id.isPresent();
 	}
 
 	public String getApplicationId() {
-		return this.application_id;
+		return this.application_id.get();
 	}
 
 	public void setApplicationId (String application_id) {
-		this.application_id = application_id;
-	}
-
-	public String getInstanceId() {
-		return this.instance_id;
-	}
-
-	public void setInstanceId (String instance_id) {
-		this.instance_id = instance_id;
+		this.application_id = Optional.of (application_id);
 	}
 
 	public boolean hasInstanceId() {
-		return null != this.instance_id && !this.instance_id.isEmpty();
+		return this.instance_id.isPresent();
+	}
+
+	public String getInstanceId() {
+		return this.instance_id.get();
+	}
+
+	public void setInstanceId (String instance_id) {
+		this.instance_id = Optional.of (instance_id);
+	}
+
+	public boolean hasUserName() {
+		return this.user_name.isPresent();
 	}
 
 	public String getUserName() {
-		return this.user_name;
+		return this.user_name.get();
 	}
 
 	public void setUserName (String user_name) {
-		this.user_name = user_name;
+		this.user_name = Optional.of (user_name);
+	}
+
+	public boolean hasPosition() {
+		return this.position.isPresent();
 	}
 
 	public String getPosition() {
-		return this.position;
+		return this.position.get();
 	}
 
 	public void setPosition (String position) {
-		this.position = position;
+		this.position = Optional.of (position);
 	}
 
 	@Override

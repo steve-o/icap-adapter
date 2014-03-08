@@ -4,6 +4,7 @@
 package com.uptyc.IcapAdapter;
 
 import java.util.*;
+import java.net.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
@@ -18,6 +19,7 @@ import com.reuters.rfa.common.Handle;
 import com.reuters.rfa.dictionary.FieldDictionary;
 import com.reuters.rfa.omm.OMMArray;
 import com.reuters.rfa.omm.OMMData;
+import com.reuters.rfa.omm.OMMDataBuffer;
 import com.reuters.rfa.omm.OMMElementEntry;
 import com.reuters.rfa.omm.OMMElementList;
 import com.reuters.rfa.omm.OMMEncoder;
@@ -140,9 +142,6 @@ public class Consumer implements Client {
 
 	private static final String RSSL_PROTOCOL       = "rssl";
 	private static final String SSLED_PROTOCOL      = "ssled";
-
-	private static final String RDM_FIELD_DICTIONARY_NAME = "RWFFld";
-	private static final String RDM_ENUMTYPE_DICTIONARY_NAME = "RWFEnum";
 
 	public Consumer (SessionConfig config, Rfa rfa, EventQueue event_queue) {
 		this.config = config;
@@ -299,7 +298,7 @@ public class Consumer implements Client {
  * A Login request message is encoded and sent by OMM Consumer and OMM non-
  * interactive provider applications.
  */
-	private void sendLoginRequest() {
+	private void sendLoginRequest() throws UnknownHostException {
 		LOG.trace ("Sending login request.");
 		RDMLoginRequest request = new RDMLoginRequest();
 		RDMLoginRequestAttrib attribInfo = new RDMLoginRequestAttrib();
@@ -310,27 +309,37 @@ public class Consumer implements Client {
 		request.setIndicationMask (EnumSet.of (RDMLoginRequest.IndicationMask.REFRESH));
 		attribInfo.setRole (RDMLogin.Role.CONSUMER);
 
-/* DACS username.
+/* DACS username (required).
  */
 		attribInfo.setNameType (RDMLogin.NameType.USER_NAME);
-		attribInfo.setName (this.config.getUserName());
+		attribInfo.setName (this.config.hasUserName() ?
+			this.config.getUserName()
+			: System.getProperty ("user.name"));
 
-/* DACS Application Id.
+/* DACS Application Id (optional).
  * e.g. "256"
  */
-		attribInfo.setApplicationId (this.config.getApplicationId());
+		if (this.config.hasApplicationId())
+			attribInfo.setApplicationId (this.config.getApplicationId());
 
-/* DACS Position name.
+/* DACS Position name (optional).
  * e.g. "localhost"
  */
-		attribInfo.setPosition (this.config.getPosition());
+		if (this.config.hasPosition()) {
+			if (!this.config.getPosition().isEmpty())
+				attribInfo.setPosition (this.config.getPosition());
+		} else {
+			StringBuilder position = new StringBuilder (InetAddress.getLocalHost().getHostAddress());
+			position.append ('/');
+			position.append (InetAddress.getLocalHost().getHostName());
+			attribInfo.setPosition (position.toString());
+		}
 
 /* Instance Id (optional).
  * e.g. "<Instance Id>"
  */
-		if (this.config.hasInstanceId()) {
+		if (this.config.hasInstanceId())
 			attribInfo.setInstanceId (this.config.getInstanceId());
-		}
 
 		request.setAttrib (attribInfo);
 
@@ -358,7 +367,8 @@ public class Consumer implements Client {
 		request.setIndicationMask (EnumSet.of (RDMDirectoryRequest.IndicationMask.REFRESH));
 
 /* Limit to named service */
-		attribInfo.setServiceName (this.config.getServiceName());
+		if (this.config.hasServiceName())
+			attribInfo.setServiceName (this.config.getServiceName());
 
 /* Only request INFO filters */
 		attribInfo.setFilterMask (EnumSet.of (RDMDirectory.FilterMask.INFO));
@@ -378,7 +388,7 @@ public class Consumer implements Client {
  * Dictionary version checking can be performed by the client after a refresh
  * (Section 2.2) response message of a Dictionary is received.
  */
-	private void sendDictionaryRequest (String dictionary_name) {
+	private void sendDictionaryRequest (String service_name, String dictionary_name) {
 		LOG.trace ("Sending dictionary request for \"{}\".", dictionary_name);
 		RDMDictionaryRequest request = new RDMDictionaryRequest();
 		RDMDictionaryRequestAttrib attribInfo = new RDMDictionaryRequestAttrib();
@@ -391,7 +401,7 @@ public class Consumer implements Client {
 // RDMDictionary.Filter.NORMAL=0x7: Provides all information needed for decoding
 		attribInfo.setVerbosity (RDMDictionary.Verbosity.NORMAL);
 		attribInfo.setDictionaryName (dictionary_name);
-		attribInfo.setServiceName (this.config.getServiceName());
+		attribInfo.setServiceName (service_name);
 
 		request.setAttrib (attribInfo);
 
@@ -491,6 +501,7 @@ public class Consumer implements Client {
 
 	private void OnLoginResponse (OMMMsg msg) {
 		LOG.trace ("OnLoginResponse: {}", msg);
+GenericOMMParser.parse (msg);
 		final RDMLoginResponse response = new RDMLoginResponse (msg);
 		final byte stream_state = response.getRespStatus().getStreamState();
 		final byte data_state   = response.getRespStatus().getDataState();
@@ -576,10 +587,14 @@ public class Consumer implements Client {
 			final OMMMap map = (OMMMap)msg.getPayload();
 			for (Iterator<?> it = map.iterator(); it.hasNext();) {
 				final OMMMapEntry map_entry = (OMMMapEntry)it.next();
-				if (OMMTypes.FILTER_LIST != map_entry.getDataType()) {
+				final OMMData map_key = map_entry.getKey();
+				if (OMMTypes.FILTER_LIST != map_entry.getDataType()
+					|| OMMTypes.ASCII_STRING != map_key.getType())
+				{
 					LOG.trace ("OMM map entry not a filter list.");
 					continue;
 				}
+				final String service_name = ((OMMDataBuffer)map_key).toString();
 				final OMMFilterList filter_list = (OMMFilterList)map_entry.getData();
 /* extract out INFO filter */
 				OMMFilterEntry info_filter = null;
@@ -616,7 +631,7 @@ public class Consumer implements Client {
 						final OMMEntry array_entry = (OMMEntry)kt.next();
 						final String dictionary_name = array_entry.getData().toString();
 						if (!this.dictionary_handle.containsKey (dictionary_name))
-							this.sendDictionaryRequest (dictionary_name);
+							this.sendDictionaryRequest (service_name, dictionary_name);
 						LOG.trace ("Used dictionary: {}", dictionary_name);
 					}
 				}
