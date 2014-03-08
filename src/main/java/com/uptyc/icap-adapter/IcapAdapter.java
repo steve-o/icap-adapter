@@ -190,17 +190,19 @@ public class IcapAdapter {
 			File symbol_path = new File (this.config.getSymbolPath());
 			if (symbol_path.canRead()) {
 				Scanner line_scanner = new Scanner (symbol_path);
+				int line_number = 0;	// for error notices
 				try {
 					while (line_scanner.hasNextLine()) {
+						++line_number;
 						Scanner field_scanner = new Scanner (line_scanner.nextLine());
 						field_scanner.useDelimiter (",");
 						String service, symbol_name;
 						List<String> fields = new LinkedList<String>();
 						if (!field_scanner.hasNext())
-							throw new IOException ("Missing service field.");
+							throw new IOException ("Missing service field in symbol file \"" + this.config.getSymbolPath() + "\" line " + line_number + ".");
 						service = field_scanner.next();
 						if (!field_scanner.hasNext())
-							throw new IOException ("Missing symbol name field.");
+							throw new IOException ("Missing symbol name field in symbol file \"" + this.config.getSymbolPath() + "\" line " + line_number + ".");
 						symbol_name = field_scanner.next();
 						while (field_scanner.hasNext())
 							fields.add (field_scanner.next());
