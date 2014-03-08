@@ -4,6 +4,7 @@
 package com.uptyc.IcapAdapter;
 
 import com.google.common.base.Optional;
+import com.google.gson.Gson;
 
 public class SessionConfig {
 //  RFA session name, one session contains a horizontal scaling set of connections.
@@ -161,24 +162,8 @@ public class SessionConfig {
 
 	@Override
 	public String toString() {
-		String servers = "";
-		for (int i = 0; i < this.servers.length; ++i) {
-			if (i > 0) servers += ", ";
-			servers += "\"" + this.servers[i] + "\"";
-		}
-		return "{ " +
-			  "\"session_name\": \"" + this.session_name + "\"" +
-			", \"connection_name\": \"" + this.connection_name + "\"" +
-			", \"consumer_name\": \"" + this.consumer_name + "\"" +
-			", \"protocol\": \"" + this.protocol + "\"" +
-			", \"service_name\": \"" + this.service_name + "\"" +
-			", \"servers\": [" + servers + "]" +
-			", \"default_port\": \"" + this.default_port + "\"" +
-			", \"application_id\": \"" + this.application_id + "\"" +
-			", \"instance_id\": \"" + this.instance_id + "\"" +
-			", \"user_name\": \"" + this.user_name + "\"" +
-			", \"position\": \"" + this.position + "\"" +
-			" }";
+		Gson gson = new Gson();
+		return gson.toJson (this);
 	}
 }
 

@@ -3,6 +3,8 @@
 
 package com.uptyc.IcapAdapter;
 
+import com.google.gson.Gson;
+
 public class Config {
 //  RFA sessions comprising of session names, connection names,
 //  RSSL hostname or IP address and default RSSL port, e.g. 14002, 14003.
@@ -48,17 +50,8 @@ public class Config {
 
 	@Override
 	public String toString() {
-		String sessions = "";
-		for (int i = 0; i < this.sessions.length; ++i) {
-			if (i > 0) sessions += ", ";
-			sessions += this.sessions[i];
-		}
-		return "{ " +
-			  "\"sessions\": [" + sessions + "]" +
-			", \"symbol_path\": \"" + this.symbol_path + "\"" +
-			", \"monitor_name\": \"" + this.monitor_name + "\"" +
-			", \"event_queue_name\": \"" + this.event_queue_name + "\"" +
-			" }";
+		Gson gson = new Gson();
+		return gson.toJson (this);
 	}
 }
 
