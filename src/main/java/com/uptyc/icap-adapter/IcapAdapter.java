@@ -148,8 +148,12 @@ public class IcapAdapter {
 /* -1 if the port is undefined */
 				if (-1 != parsed.getPort()) 
 					session_config.setDefaultPort (Integer.toString (parsed.getPort()));
-				if (!Strings.isNullOrEmpty (parsed.getPath()))
+/* Catch default URL of host/ as empty */
+				if (!Strings.isNullOrEmpty (parsed.getPath())
+					&& parsed.getPath().length() > 1)
+				{
 					session_config.setServiceName (new File (parsed.getPath()).getName());
+				}
 				if (query.containsKey (APPLICATION_ID_PARAM))
 					session_config.setApplicationId (query.get (APPLICATION_ID_PARAM));
 				if (query.containsKey (INSTANCE_ID_PARAM))
