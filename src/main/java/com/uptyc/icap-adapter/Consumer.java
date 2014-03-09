@@ -38,6 +38,7 @@ import com.reuters.rfa.rdm.RDMService;
 import com.reuters.rfa.session.event.ConnectionEvent;
 import com.reuters.rfa.session.event.EntitlementsAuthenticationEvent;
 import com.reuters.rfa.session.event.MarketDataItemEvent;
+import com.reuters.rfa.session.event.MarketDataItemStatus;
 import com.reuters.rfa.session.event.MarketDataSvcEvent;
 import com.reuters.rfa.session.event.MarketDataSvcStatus;
 import com.reuters.rfa.session.Session;
@@ -717,15 +718,78 @@ GenericOMMParser.parse (msg);
 		final long now = System.currentTimeMillis();
 		LOG.trace ("OnMarketDataItemEvent: {}", event);
 /* strings in switch are not supported in -source 1.6 */
-		if (MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()
-			|| MarketDataItemEvent.UPDATE == event.getMarketDataMsgType()) {
+/* ignore initial images and refreshes */
+		if (/* MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()
+			|| */ MarketDataItemEvent.UPDATE == event.getMarketDataMsgType()) {
 		}
 		else if (MarketDataItemEvent.UNSOLICITED_IMAGE == event.getMarketDataMsgType()) {
 			LOG.trace ("Ignoring unsolicited image.");
 			return;
 		}
 		else if (MarketDataItemEvent.STATUS == event.getMarketDataMsgType()) {
-			LOG.trace ("Ignoring status.");
+			LOG.trace ("Status: {}", event);
+
+/* MARKET_DATA_ITEM_EVENT, service = ELEKTRON_EDGE, item = RBK,
+ * MarketDataMessageType = STATUS, MarketDataItemStatus = { state: CLOSED,
+ * code: NONE, text: "The record could not be found"}, data = NULL
+ */
+
+/* Item stream recovered. */
+			if (MarketDataItemStatus.OK == event.getStatus().getState())
+				return;
+
+/* ICAP error output here */
+			final ItemStream item_stream = (ItemStream)event.getClosure();
+			StringBuilder icap = new StringBuilder();
+			icap	.append (item_stream.getServiceName())
+				.append (',')
+				.append (item_stream.getItemName())
+				.append (',')
+				.append (new java.sql.Timestamp (now))
+				.append (',');
+/* Rewrite to RSSL/OMM semantics, (Stream,Data,Code)
+ *
+ * Examples: OPEN,OK,NONE
+ * 	     - The item is served by the provider. The consumer application established
+ * 	       the item event stream.
+ *
+ * 	     OPEN,SUSPECT,NO_RESOURCES
+ * 	     - The provider does not offer data for the requested item at this time.
+ * 	       However, the system will try to recover this item when available.
+ *
+ * 	     CLOSED_RECOVER,SUSPECT,NO_RESOURCES
+ * 	     - The provider does not offer data for the requested item at this time. The
+ * 	       application can try to re-request the item later.
+ *
+ * 	     CLOSED,SUSPECT,/any/
+ * 	     -  The item is not open on the provider, and the application should close this
+ * 	        stream.
+ */
+			String stream_state = "OPEN", data_state = "NO_CHANGE";
+			if (event.isEventStreamClosed()
+				|| MarketDataItemStatus.CLOSED == event.getStatus().getState())
+			{
+				stream_state = "CLOSED";
+				data_state = "SUSPECT";
+			}
+			else if (MarketDataItemStatus.CLOSED_RECOVER == event.getStatus().getState())
+			{
+				stream_state = "CLOSED_RECOVER";
+				data_state = "SUSPECT";
+			}
+			else if (MarketDataItemStatus.STALE == event.getStatus().getState())
+			{
+				data_state = "SUSPECT";
+			}
+
+			icap	.append (stream_state)
+				.append (',')
+				.append (data_state)
+				.append (',')
+				.append (event.getStatus().getStatusCode().toString())
+				.append (',')
+				.append (event.getStatus().getStatusText());
+			LOG.info (ICAP_MARKER, icap.toString());
 			return;
 		}
 		else if (MarketDataItemEvent.CORRECTION == event.getMarketDataMsgType()) {
@@ -803,8 +867,7 @@ GenericOMMParser.parse (msg);
 
 /* ICAP output here */
 			final ItemStream item_stream = (ItemStream)event.getClosure();
-			StringBuilder icap = new StringBuilder();
-			icap
+			StringBuilder icap = new StringBuilder()
 				.append (item_stream.getServiceName())
 				.append (',')
 				.append (item_stream.getItemName())
