@@ -139,7 +139,7 @@ public class Consumer implements Client {
 	private boolean pending_directory;
 	private boolean pending_dictionary;
 
-	private static final bool UNSUBSCRIBE_ON_SHUTDOWN = false;
+	private static final boolean UNSUBSCRIBE_ON_SHUTDOWN = false;
 
 	private static final int OMM_PAYLOAD_SIZE       = 5000;
 

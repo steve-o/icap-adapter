@@ -245,27 +245,21 @@ public class IcapAdapter {
 
 	}
 
-/*
-	private class ShutdownThread extends Thread {
-		private EventQueue event_queue;
-		public ShutdownThread (EventQueue event_queue) {
-			this.event_queue = event_queue;
-		}
-		@Override
-		public void run() {
-			if (null != this.event_queue && this.event_queue.isActive())
-				this.event_queue.deactivate();
-		}
-	} */
-
+/* LOG4J2 logging is terminated by an installed shutdown hook.  This hook can
+ * disabled by adding shutdownHook="disable" to the <Configuration> stanza.
+ */
 	private class ShutdownThread extends Thread {
 		private IcapAdapter adapter;
+		private org.apache.logging.log4j.core.LoggerContext context;
 		public ShutdownThread (IcapAdapter adapter) {
 			this.adapter = adapter;
+/* Capture on startup as we cannot capture on shutdown as it would try to reinit:
+ *   WARN Unable to register shutdown hook due to JVM state
+ */
+			this.context = (org.apache.logging.log4j.core.LoggerContext)LogManager.getContext();
 		}
 		@Override
 		public void run() {
-			LOG.trace ("run");
 			if (null != this.adapter
 				&& null != this.adapter.event_queue
 				&& this.adapter.event_queue.isActive())
@@ -278,6 +272,14 @@ public class IcapAdapter {
 					}
 					LOG.trace ("Shutdown complete.");
 				} catch (InterruptedException e) {}
+			}
+/* LOG4J2-318 to manually shutdown.
+ */
+			if (context.isStarted()
+				&& !context.getConfiguration().isShutdownHookEnabled())
+			{
+				LOG.trace ("Shutdown log4j2.");
+				context.stop();
 			}
 		}
 	}
