@@ -110,6 +110,10 @@ public class Rfa {
 				value = username.toString();
 				staging.addVariable (this.fixRfaStringPath (name), value);
 
+/* 9.10.2. Merged Thread Model */
+				name = "/Sessions/" + session_name + "/shareConnections";
+				value = "False";
+				staging.addVariable (this.fixRfaStringPath (name), value);
 /* Enable dictionary download */
 				name = "/Connections/" + connection_name + "/downloadDataDict";
 				value = "True";
@@ -140,7 +144,7 @@ public class Rfa {
 	}
 
 	public void clear() {
-		LOG.trace ("Closing RFA.");
+		LOG.trace ("Uninitializing RFA.");
 		Context.uninitialize();
 	}
 }

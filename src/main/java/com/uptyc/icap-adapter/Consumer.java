@@ -139,6 +139,8 @@ public class Consumer implements Client {
 	private boolean pending_directory;
 	private boolean pending_dictionary;
 
+	private static final bool UNSUBSCRIBE_ON_SHUTDOWN = false;
+
 	private static final int OMM_PAYLOAD_SIZE       = 5000;
 
 	private static final String RSSL_PROTOCOL       = "rssl";
@@ -181,7 +183,7 @@ public class Consumer implements Client {
 			this.error_handle = this.omm_consumer.registerClient (this.event_queue, ommErrorIntSpec, this, null);
 
 /* OMM memory management. */
-			this.omm_pool = OMMPool.create();
+			this.omm_pool = OMMPool.create (OMMPool.SINGLE_THREADED);
 			this.omm_encoder = this.omm_pool.acquireEncoder();
 			this.omm_encoder.initialize (OMMTypes.MSG, OMM_PAYLOAD_SIZE);
 
@@ -219,6 +221,90 @@ public class Consumer implements Client {
 	}
 
 	public void clear() {
+		if (null != this.market_data_subscriber) {
+			LOG.trace ("Closing MarketDataSubscriber.");
+			if (UNSUBSCRIBE_ON_SHUTDOWN) {
+/* 9.9.3 Upstream Batching
+ * Market Data Subscriber’s unsubscribeAll() can be used to encourage RFA Java to batch unsubscribe
+ * requests on connections that support batching of those requests into a message.
+ */
+				this.market_data_subscriber.unsubscribeAll();
+				if (null != this.directory && !this.directory.isEmpty())
+					this.directory.clear();
+				if (null != this.error_handle) {
+					this.market_data_subscriber.unregisterClient (this.error_handle);
+					this.error_handle = null;
+				}
+			} else {
+				if (null != this.directory && !this.directory.isEmpty())
+					this.directory.clear();
+				if (null != this.error_handle)
+					this.error_handle = null;
+			}
+			this.market_data_subscriber.destroy();
+			this.market_data_subscriber = null;
+		}
+		if (null != this.rdm_dictionary)
+			this.rdm_dictionary = null;
+		if (null != this.omm_encoder)
+			this.omm_encoder = null;
+		if (null != this.omm_pool) {
+			LOG.trace ("Closing OMMPool.");
+			this.omm_pool.destroy();
+			this.omm_pool = null;
+		}
+		if (null != this.omm_consumer) {
+			LOG.trace ("Closing OMMConsumer.");
+/* 8.2.11 Shutting Down an Application
+ * an application may just destroy Event
+ * Source, in which case the closing of the streams is handled by the RFA.
+ */
+			if (UNSUBSCRIBE_ON_SHUTDOWN) {
+/* 9.2.5.3 Batch Close
+ * The consumer application
+ * builds a List of Handles of the event streams to close and calls OMMConsumer.unregisterClient().
+ */
+				if (null != this.directory && !this.directory.isEmpty()) {
+					List<Handle> item_handles = new ArrayList<Handle> (this.directory.size());
+					for (ItemStream item_stream : this.directory.values()) {
+						if (item_stream.hasItemHandle())
+							item_handles.add (item_stream.getItemHandle());
+					}
+					this.omm_consumer.unregisterClient (item_handles, null);
+					this.directory.clear();
+				}
+				if (null != this.dictionary_handle && !this.dictionary_handle.isEmpty()) {
+					for (FlaggedHandle flagged_handle : this.dictionary_handle.values()) {
+						this.omm_consumer.unregisterClient (flagged_handle.getHandle());
+					}
+					this.dictionary_handle.clear();
+				}
+				if (null != this.directory_handle) {
+					this.omm_consumer.unregisterClient (this.directory_handle);
+					this.directory_handle = null;
+				}
+				if (null != this.login_handle) {
+					this.omm_consumer.unregisterClient (this.login_handle);
+					this.login_handle = null;
+				}
+			} else {
+				if (null != this.directory && !this.directory.isEmpty())
+					this.directory.clear();
+				if (null != this.dictionary_handle && !this.dictionary_handle.isEmpty())
+					this.dictionary_handle.clear();
+				if (null != this.directory_handle)
+					this.directory_handle = null;
+				if (null != this.login_handle)
+					this.login_handle = null;
+			}
+			this.omm_consumer.destroy();
+			this.omm_consumer = null;
+		}
+		if (null != this.session) {
+			LOG.trace ("Closing RFA Session.");
+			this.session.release();
+			this.session = null;
+		}
 	}
 
 /* Create an item stream for a given symbol name.  The Item Stream maintains
@@ -502,7 +588,7 @@ public class Consumer implements Client {
 
 	private void OnLoginResponse (OMMMsg msg) {
 		LOG.trace ("OnLoginResponse: {}", msg);
-GenericOMMParser.parse (msg);
+//GenericOMMParser.parse (msg);
 		final RDMLoginResponse response = new RDMLoginResponse (msg);
 		final byte stream_state = response.getRespStatus().getStreamState();
 		final byte data_state   = response.getRespStatus().getDataState();
@@ -880,7 +966,7 @@ GenericOMMParser.parse (msg);
 			LOG.info (ICAP_MARKER, icap.toString());
 
 		} catch (TibException e) {
-			LOG.warn ("Unable to unpack data with TibMsg.");
+			LOG.warn ("Unable to unpack data with TibMsg: {}", e.getMessage());
 		}
 	}
 

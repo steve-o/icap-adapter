@@ -16,6 +16,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.reuters.rfa.common.Context;
+import com.reuters.rfa.common.DeactivatedException;
 import com.reuters.rfa.common.Dispatchable;
 import com.reuters.rfa.common.DispatchException;
 import com.reuters.rfa.common.EventQueue;
@@ -244,34 +245,96 @@ public class IcapAdapter {
 
 	}
 
+/*
+	private class ShutdownThread extends Thread {
+		private EventQueue event_queue;
+		public ShutdownThread (EventQueue event_queue) {
+			this.event_queue = event_queue;
+		}
+		@Override
+		public void run() {
+			if (null != this.event_queue && this.event_queue.isActive())
+				this.event_queue.deactivate();
+		}
+	} */
+
+	private class ShutdownThread extends Thread {
+		private IcapAdapter adapter;
+		public ShutdownThread (IcapAdapter adapter) {
+			this.adapter = adapter;
+		}
+		@Override
+		public void run() {
+			LOG.trace ("run");
+			if (null != this.adapter
+				&& null != this.adapter.event_queue
+				&& this.adapter.event_queue.isActive())
+			{
+				this.adapter.event_queue.deactivate();
+				try {
+					LOG.trace ("Waiting for mainloop shutdown ...");
+					while (!this.adapter.is_shutdown) {
+						Thread.sleep (100);
+					}
+					LOG.trace ("Shutdown complete.");
+				} catch (InterruptedException e) {}
+			}
+		}
+	}
+
 	private void run (CommandLine line, Options options) throws Exception {
 		this.init (line, options);
+		Thread shutdown_hook = new ShutdownThread (this);
+		Runtime.getRuntime().addShutdownHook (shutdown_hook);
+		LOG.trace ("Shutdown hook installed.");
 		this.mainloop();
+		LOG.trace ("Shutdown in progress.");
+/* Cannot remove hook if shutdown is in progress. */
+//		Runtime.getRuntime().removeShutdownHook (shutdown_hook);
+//		LOG.trace ("Removed shutdown hook.");
 		this.clear();
+		this.is_shutdown = true;
 	}
+
+	public volatile boolean is_shutdown = false;
 
 	private void mainloop() {
 		try {
-			while (true) {
+			while (this.event_queue.isActive()) {
 				this.event_queue.dispatch (Dispatchable.INFINITE_WAIT);
 			}
+		} catch (DeactivatedException e) {
+/* manual shutdown */
+			LOG.trace ("Mainloop deactivated.");
+			return;
 		} catch (DispatchException e) {
 			e.printStackTrace();
 		}
 	}
 
 	private void clear() {
+/* Prevent new events being generated whilst shutting down. */
 		if (null != this.event_queue && this.event_queue.isActive())
+			LOG.trace ("Deactivating EventQueue.");
 			this.event_queue.deactivate();
 
-		if (null != this.consumer)
+		if (null != this.consumer) {
+			LOG.trace ("Closing Consumer.");
 			this.consumer.clear();
+			this.consumer = null;
+		}
 
-		if (null != this.event_queue)
+		if (null != this.event_queue) {
+			LOG.trace ("Closing EventQueue.");
 			this.event_queue.destroy();
+			this.event_queue = null;
+		}
 
-		if (null != this.rfa)
+		if (null != this.rfa) {
+			LOG.trace ("Closing RFA.");
 			this.rfa.clear();
+			this.rfa = null;
+		}
 	}
 
 	public static void main (String[] args) throws Exception {
