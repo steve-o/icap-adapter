@@ -1,21 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="WARN">
+<Configuration status="warn" shutdownHook="enable">
   <Properties>
-    <Property name="filename">target/test.log</Property>
+    <Property name="filename">logs/icap.log</Property>
   </Properties>
   <Appenders>
     <Console name="Console" target="SYSTEM_OUT">
       <PatternLayout pattern="%d %-5p [%t] %C{2} (%F:%L) - %m%n"/>
-      <filters>
-        <MarkerFilter marker="ICAP" onMatch="DENY" onMismatch="ACCEPT"/>
-      </filters>
     </Console>
     <RollingRandomAccessFile name="File" fileName="${filename}"
-    	filePattern="logs/$${date:yyyy-MM}/app-%d{yyyy-MM-dd-HH}-%i.log">
+    	filePattern="logs/$${date:yyyy-MM}/icap-%d{yyyy-MM-dd-HH}-%i.log">
       <PatternLayout pattern="%m%n"/>
-      <filters>
-        <MarkerFilter marker="ICAP" onMatch="ACCEPT" onMismatch="DENY"/>
-      </filters>
       <Policies>
         <TimeBasedTriggeringPolicy interval="6" modulate="true"/>
         <SizeBasedTriggeringPolicy size="250 MB"/>
@@ -27,7 +21,7 @@
     <Logger name="com.uptyc.IcapAdapter.Consumer" level="info">
       <AppenderRef ref="File"/>
     </Logger>
-    <Root level="info">
+    <Root level="error">
       <AppenderRef ref="Console"/>
     </Root>
   </Loggers>
