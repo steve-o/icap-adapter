@@ -9,6 +9,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.MarkerManager;
+import org.joda.time.DateTime;
 import com.google.common.base.Joiner;
 import com.reuters.rfa.common.Client;
 import com.reuters.rfa.common.Context;
@@ -317,9 +318,10 @@ public class Consumer implements Client {
 /* viewType:- RDMUser.View.FIELD_ID_LIST or RDMUser.View.ELEMENT_NAME_LIST */
 		item_stream.setView (instrument.getFields());
 
-		StringBuilder key = new StringBuilder (instrument.getService());
-		key.append ('.');
-		key.append (instrument.getName());
+		StringBuilder key = new StringBuilder()
+					.append (instrument.getService())
+					.append ('.')
+					.append (instrument.getName());
 		if (!this.is_muted) {
 			if (this.config.getProtocol().equalsIgnoreCase (RSSL_PROTOCOL))
 				this.sendItemRequest (item_stream);
@@ -801,7 +803,7 @@ public class Consumer implements Client {
 	}
 
 	private void OnMarketDataItemEvent (MarketDataItemEvent event) {
-		final long now = System.currentTimeMillis();
+		final DateTime dt = new DateTime();
 		LOG.trace ("OnMarketDataItemEvent: {}", event);
 /* strings in switch are not supported in -source 1.6 */
 /* ignore initial images and refreshes */
@@ -826,12 +828,12 @@ public class Consumer implements Client {
 
 /* ICAP error output here */
 			final ItemStream item_stream = (ItemStream)event.getClosure();
-			StringBuilder icap = new StringBuilder();
-			icap	.append (item_stream.getServiceName())
+			StringBuilder icap = new StringBuilder()
+				.append (item_stream.getServiceName())
 				.append (',')
 				.append (item_stream.getItemName())
 				.append (',')
-				.append (new java.sql.Timestamp (now))
+				.append (dt.toString())
 				.append (',');
 /* Rewrite to RSSL/OMM semantics, (Stream,Data,Code)
  *
@@ -936,18 +938,17 @@ public class Consumer implements Client {
 			return;
 
 		try {
-			this.msg.ReUse();
-			this.field.ReUse();
 			this.msg.UnPack (data);
 			if (LOG.isDebugEnabled()) {
-				for (int status = this.field.First(msg);
+				for (int status = this.field.First (msg);
 					TibMsg.TIBMSG_OK == status;
 					status = this.field.Next())
 				{
-					StringBuilder out = new StringBuilder (this.field.Name());
-					out.append (": ");
-					out.append (this.field.StringData());
-					LOG.debug (out.toString());
+					LOG.debug (new StringBuilder()
+						.append (this.field.Name())
+						.append (": ")
+						.append (this.field.StringData())
+						.toString());
 				}
 			}
 
@@ -958,7 +959,7 @@ public class Consumer implements Client {
 				.append (',')
 				.append (item_stream.getItemName())
 				.append (',')
-				.append (new java.sql.Timestamp (now));
+				.append (dt.toString());
 			for (String field : item_stream.getView()) {
 				icap.append (',')
 					.append (this.msg.Get (field).StringData());
