@@ -3,8 +3,8 @@
 JAVA=java
 JAVA=/usr/lib/jvm/java-1.6.0/bin/java
 
-ICAP=target/classes
-#ICAP=target/icap-adapter-1.1-SNAPSHOT.jar
+#ICAP=target/classes
+ICAP=target/icap-adapter-1.1-SNAPSHOT.jar
 
 # Apache Commons command-line-processor
 COMMONSCLI=commons-cli-1.2.jar
@@ -32,7 +32,8 @@ RFAVALUEADD=ValueAdd_DomainRep.java6.jar
 
 set -x
 $JAVA \
-	-cp $ICAP:$COMMONSCLI:$GUAVA:$GSON:$JODA:$LOG4J2:$RFA:$RFAVALUEADD:. \
+	-cp $ICAP:$COMMONSCLI:$GUAVA:$GSON:$JODA:$LOG4J2:$RFA:$RFAVALUEADD \
 	-enableassertions \
+	-Dlog4j.configurationFile=log4j2.xml \
 	com.uptyc.IcapAdapter.IcapAdapter $*
 
