@@ -4,6 +4,7 @@
 package com.uptyc.IcapAdapter;
 
 import com.reuters.rfa.common.Handle;
+import com.google.gson.Gson;
 
 public class Instrument {
 	private String service;
@@ -42,16 +43,8 @@ public class Instrument {
 
 	@Override
 	public String toString() {
-		String fields = "";
-		for (int i = 0; i < this.fields.length; ++i) {
-			if (i > 0) fields += ", ";
-			fields += "\"" + this.fields[i] + "\"";
-		}
-		return "{ " +
-			  "\"service\": \"" + this.service + "\"" +
-			", \"name\": \"" + this.name + "\"" +
-			", \"fields\": [" + fields + "]" +
-			" }";
+		Gson gson = new Gson();
+		return gson.toJson (this);
 	}
 }
 

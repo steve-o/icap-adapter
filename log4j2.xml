@@ -11,6 +11,7 @@
     	filePattern="logs/$${date:yyyy-MM}/icap-%d{yyyy-MM-dd-HH}-%i.log">
       <PatternLayout pattern="%m%n"/>
       <Policies>
+        <OnStartupTriggeringPolicy />
         <TimeBasedTriggeringPolicy interval="6" modulate="true"/>
         <SizeBasedTriggeringPolicy size="250 MB"/>
       </Policies>
@@ -18,7 +19,7 @@
   </Appenders>
   <Loggers>
     <Logger name="com.reuters.rfa" level="warn"/>
-    <Logger name="com.uptyc.IcapAdapter.Consumer" level="info">
+    <Logger name="com.uptyc.IcapAdapter.Consumer" level="info" additivity="false">
       <AppenderRef ref="File"/>
     </Logger>
     <Root level="error">

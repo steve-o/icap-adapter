@@ -1,5 +1,11 @@
 #!/bin/sh
 
+JAVA=java
+JAVA=/usr/lib/jvm/java-1.6.0/bin/java
+
+ICAP=target/classes
+#ICAP=target/icap-adapter-1.1-SNAPSHOT.jar
+
 # Apache Commons command-line-processor
 COMMONSCLI=commons-cli-1.2.jar
 
@@ -14,24 +20,19 @@ JODA=joda-time-2.3.jar
 JAVAUTILLOGGINGAPI=jul-to-slf4j-1.7.6.jar
 SLF4JAPI=slf4j-api-1.7.6.jar
 SLF4JBINDING=log4j-slf4j-impl-2.0-rc1.jar
+LOG4J2=log4j-api-2.0-rc1.jar:log4j-core-2.0-rc1.jar
 LOG4J2=log4j-api-2.0-rc1.jar:log4j-core-2.0-rc1.jar:$SLF4JBINDING:$SLF4JAPI:$JAVAUTILLOGGINGAPI
-##LOG4J2=log4j-api-2.0-rc1.jar:log4j-core-2.0-rc1.jar
 
 # Thomson Reuters RFA and ValueAdd libraries
-RFA6=rfa.java6.jar
-RFAVALUEADD6=ValueAdd_DomainRep.java6.jar
-
 RFA=rfa.jar
-RFAVALUEADD=ValueAdd_DomainRep.jar
+RFA=rfa.java6.jar
 
-/usr/lib/jvm/java-1.6.0/bin/java \
-	-cp $COMMONSCLI:$GUAVA:$GSON:$JODA:$LOG4J2:$RFA6:$RFAVALUEADD6:target/classes \
+RFAVALUEADD=ValueAdd_DomainRep.jar
+RFAVALUEADD=ValueAdd_DomainRep.java6.jar
+
+set -x
+$JAVA \
+	-cp $ICAP:$COMMONSCLI:$GUAVA:$GSON:$JODA:$LOG4J2:$RFA:$RFAVALUEADD:. \
 	-enableassertions \
 	com.uptyc.IcapAdapter.IcapAdapter $*
-
-#java \
-#	-cp $COMMONSCLI:$GUAVA:$GSON:$JODA:$LOG4J2:$RFA:$RFAVALUEADD:target/classes \
-#	-enableassertions \
-#	com.uptyc.IcapAdapter.IcapAdapter $*
-
 

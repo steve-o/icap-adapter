@@ -955,19 +955,21 @@ public class Consumer implements Client {
 /* ICAP output here */
 			final ItemStream item_stream = (ItemStream)event.getClosure();
 			StringBuilder icap = new StringBuilder()
-				.append (item_stream.getServiceName())
-				.append (',')
-				.append (item_stream.getItemName())
-				.append (',')
-				.append (dt.toString());
-			for (String field : item_stream.getView()) {
-				icap.append (',')
-					.append (this.msg.Get (field).StringData());
+				.append ('{')
+				  .append ("\"timestamp\":\"").append (dt.toString()).append ('\"')
+				.append (",\"service\":\"").append (item_stream.getServiceName()).append ('\"')
+				.append (",\"recordname\":\"").append (item_stream.getItemName()).append ('\"')
+				.append (",\"fields\":{");
+			final String[] view = item_stream.getView();
+			for (int i = 0; i < view.length; ++i) {
+				if (i > 0) icap.append (',');
+				icap.append ('\"').append (view[i]).append ("\":").append (this.msg.Get (view[i]).StringData());
 			}
+			icap.append ("}}");
 			LOG.info (ICAP_MARKER, icap.toString());
 
 		} catch (TibException e) {
-			LOG.warn ("Unable to unpack data with TibMsg: {}", e.getMessage());
+			LOG.trace ("Unable to unpack data with TibMsg: {}", e.getMessage());
 		}
 	}
 
