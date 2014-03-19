@@ -4,3 +4,6 @@ example.*
 idn_rdf.*
 target/
 logs/
+RDMFieldDictionary
+enumtype.def
+appendix_a

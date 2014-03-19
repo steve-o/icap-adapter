@@ -11,6 +11,8 @@ import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.MarkerManager;
 import org.joda.time.DateTime;
 import com.google.common.base.Joiner;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.reuters.rfa.common.Client;
 import com.reuters.rfa.common.Context;
 import com.reuters.rfa.common.Event;
@@ -47,8 +49,9 @@ import com.reuters.rfa.session.MarketDataEnums;
 import com.reuters.rfa.session.MarketDataItemSub;
 import com.reuters.rfa.session.MarketDataSubscriber;
 import com.reuters.rfa.session.MarketDataSubscriberInterestSpec;
-import com.reuters.rfa.session.omm.OMMConnectionEvent;
-import com.reuters.rfa.session.omm.OMMConnectionIntSpec;
+// RFA 7.5.1
+//import com.reuters.rfa.session.omm.OMMConnectionEvent;
+//import com.reuters.rfa.session.omm.OMMConnectionIntSpec;
 import com.reuters.rfa.session.omm.OMMConsumer;
 import com.reuters.rfa.session.omm.OMMErrorIntSpec;
 import com.reuters.rfa.session.omm.OMMItemEvent;
@@ -96,6 +99,9 @@ public class Consumer implements Client {
 	private MarketDataSubscriber market_data_subscriber;
 	private TibMsg msg;
 	private TibField field;
+
+/* JSON serialisation */
+	private Gson gson;
 
 /* Data dictionaries. */
 	private RDMDictionaryCache rdm_dictionary;
@@ -216,6 +222,9 @@ public class Consumer implements Client {
 		{
 			throw new Exception ("Unsupported transport protocol \"" + this.config.getProtocol() + "\".");
 		}
+
+/* Null object support */
+		this.gson = new GsonBuilder().serializeNulls().create();
 
 		this.directory = new LinkedHashMap<String, ItemStream>();
 		this.dictionary_handle = new TreeMap<String, FlaggedHandle>();
@@ -510,9 +519,10 @@ public class Consumer implements Client {
 			this.OnOMMItemEvent ((OMMItemEvent)event);
 			break;
 
-		case Event.OMM_CONNECTION_EVENT:
-			this.OnConnectionEvent ((OMMConnectionEvent)event);
-			break;
+// RFA 7.5.1
+//		case Event.OMM_CONNECTION_EVENT:
+//			this.OnConnectionEvent ((OMMConnectionEvent)event);
+//			break;
 
 		case Event.MARKET_DATA_ITEM_EVENT:
 			this.OnMarketDataItemEvent ((MarketDataItemEvent)event);
@@ -590,6 +600,7 @@ public class Consumer implements Client {
 
 	private void OnLoginResponse (OMMMsg msg) {
 		LOG.trace ("OnLoginResponse: {}", msg);
+/* RFA example helper to dump incoming message. */
 //GenericOMMParser.parse (msg);
 		final RDMLoginResponse response = new RDMLoginResponse (msg);
 		final byte stream_state = response.getRespStatus().getStreamState();
@@ -649,8 +660,8 @@ public class Consumer implements Client {
 	private void OnDirectoryResponse (OMMMsg msg) {
 		LOG.trace ("OnDirectoryResponse: {}", msg);
 //GenericOMMParser.parse (msg);
+/* RFA 7.5.1.L1 raises invalid exception for Elektron Edge directory response. */
 //		final RDMDirectoryResponse response = new RDMDirectoryResponse (msg);
-/* Received */
 /*
 		if (response.hasPayload()) {
 			final RDMDirectoryResponsePayload payload = response.getPayload();
@@ -771,7 +782,8 @@ public class Consumer implements Client {
 			{
 				LOG.trace ("enumtype.def version: {}", field_dictionary.getEnumProperty ("Version"));
 			}
-			GenericOMMParser.initializeDictionary (field_dictionary);
+/* Notify RFA example helper of dictionary if using to dump message content. */
+//			GenericOMMParser.initializeDictionary (field_dictionary);
 
 			this.dictionary_handle.get ((String)closure).setFlag();
 
@@ -794,12 +806,35 @@ public class Consumer implements Client {
 /* MMT_MARKETPRICE domain.
  */
 	private void OnMarketPrice (OMMMsg msg) {
-		GenericOMMParser.parse (msg);
+//		GenericOMMParser.parse (msg);
 	}
 
 
-	private void OnConnectionEvent (OMMConnectionEvent event) {
-		LOG.trace ("OnConnectionEvent: {}", event);
+// RFA 7.5.1
+//	private void OnConnectionEvent (OMMConnectionEvent event) {
+//		LOG.trace ("OnConnectionEvent: {}", event);
+//	}
+
+	private class LogMessage {
+		private final String timestamp;
+		private final String type;
+		private final String service;
+		private final String recordname;
+		private final String stream;
+		private final String data;
+		private final String code;
+		private final String text;
+
+		public LogMessage (String timestamp, String type, String service, String recordname, String stream, String data, String code, String text) {
+			this.timestamp = timestamp;
+			this.type = type;
+			this.service = service;
+			this.recordname = recordname;
+			this.stream = stream;
+			this.data = data;
+			this.code = code;
+			this.text = text;
+		}
 	}
 
 	private void OnMarketDataItemEvent (MarketDataItemEvent event) {
@@ -828,13 +863,6 @@ public class Consumer implements Client {
 
 /* ICAP error output here */
 			final ItemStream item_stream = (ItemStream)event.getClosure();
-			StringBuilder icap = new StringBuilder()
-				.append (item_stream.getServiceName())
-				.append (',')
-				.append (item_stream.getItemName())
-				.append (',')
-				.append (dt.toString())
-				.append (',');
 /* Rewrite to RSSL/OMM semantics, (Stream,Data,Code)
  *
  * Examples: OPEN,OK,NONE
@@ -870,14 +898,16 @@ public class Consumer implements Client {
 				data_state = "SUSPECT";
 			}
 
-			icap	.append (stream_state)
-				.append (',')
-				.append (data_state)
-				.append (',')
-				.append (event.getStatus().getStatusCode().toString())
-				.append (',')
-				.append (event.getStatus().getStatusText());
-			LOG.info (ICAP_MARKER, icap.toString());
+/* Defer to GSON to escape status text. */
+			LogMessage msg = new LogMessage (dt.toString(),
+					"STATUS",
+					item_stream.getServiceName(),
+					item_stream.getItemName(),
+					stream_state,
+					data_state,
+					event.getStatus().getStatusCode().toString(),
+					event.getStatus().getStatusText());
+			LOG.info (ICAP_MARKER, this.gson.toJson (msg));
 			return;
 		}
 		else if (MarketDataItemEvent.CORRECTION == event.getMarketDataMsgType()) {
@@ -952,11 +982,12 @@ public class Consumer implements Client {
 				}
 			}
 
-/* ICAP output here */
+/* ICAP output here, do not use GSON as fields map would be expensive to create. */
 			final ItemStream item_stream = (ItemStream)event.getClosure();
 			StringBuilder icap = new StringBuilder()
 				.append ('{')
-				  .append ("\"timestamp\":\"").append (dt.toString()).append ('\"')
+				 .append ("\"timestamp\":\"").append (dt.toString()).append ('\"')
+				.append (",\"type\":\"UPDATE\"")
 				.append (",\"service\":\"").append (item_stream.getServiceName()).append ('\"')
 				.append (",\"recordname\":\"").append (item_stream.getItemName()).append ('\"')
 				.append (",\"fields\":{");
@@ -967,7 +998,6 @@ public class Consumer implements Client {
 			}
 			icap.append ("}}");
 			LOG.info (ICAP_MARKER, icap.toString());
-
 		} catch (TibException e) {
 			LOG.trace ("Unable to unpack data with TibMsg: {}", e.getMessage());
 		}

@@ -4,7 +4,7 @@
 
   <groupId>com.uptyc</groupId>
   <artifactId>icap-adapter</artifactId>
-  <version>1.1-SNAPSHOT</version>
+  <version>1.2-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>icap-adapter</name>
@@ -94,16 +94,16 @@
     <dependency>
       <groupId>com.reuters.rfa</groupId>
       <artifactId>rfa</artifactId>
-      <version>7.5.1</version>
+      <version>7.2.1</version>
       <scope>system</scope>
-      <systemPath>${project.basedir}/third_party/rfaj7.5.1.L1.all.rrg/Libs/rfa.jar</systemPath>
+      <systemPath>${project.basedir}/third_party/rfaj7.2.1.L1.all.rrg/Libs/rfa.jar</systemPath>
     </dependency>
     <dependency>
       <groupId>com.thomsonreuters.rfa.valueadd.domainrep</groupId>
       <artifactId>valueadd-domainrep</artifactId>
-      <version>7.5.1</version>
+      <version>7.2.1</version>
       <scope>system</scope>
-      <systemPath>${project.basedir}/third_party/rfaj7.5.1.L1.all.rrg/ValueAdd/DomainRep/Libs/ValueAdd_DomainRep.jar</systemPath>
+      <systemPath>${project.basedir}/third_party/rfaj7.2.1.L1.all.rrg/ValueAdd/DomainRep/Libs/ValueAdd_DomainRep.jar</systemPath>
     </dependency>
   </dependencies>
 </project>
