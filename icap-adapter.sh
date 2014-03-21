@@ -1,11 +1,11 @@
 #!/bin/sh
 
 JAVA=java
-JAVA=/usr/lib/jvm/java-1.6.0/bin/java
+JAVA=/usr/java/jdk1.8.0/bin/java
 JAVA=/home/sumologic/jre1.6.0_26/bin/java
 
 #ICAP=target/classes
-ICAP=target/icap-adapter-1.2-SNAPSHOT.jar
+ICAP=target/icap-adapter-1.3-SNAPSHOT.jar
 
 # Apache Commons command-line-processor
 COMMONSCLI=commons-cli-1.2.jar

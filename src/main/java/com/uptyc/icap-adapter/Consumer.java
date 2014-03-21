@@ -102,6 +102,7 @@ public class Consumer implements Client {
 
 /* JSON serialisation */
 	private Gson gson;
+	private StringBuilder sb;
 
 /* Data dictionaries. */
 	private RDMDictionaryCache rdm_dictionary;
@@ -226,6 +227,9 @@ public class Consumer implements Client {
 /* Null object support */
 		this.gson = new GsonBuilder().serializeNulls().create();
 
+/* Manual serialisation */
+		this.sb = new StringBuilder (512);
+
 		this.directory = new LinkedHashMap<String, ItemStream>();
 		this.dictionary_handle = new TreeMap<String, FlaggedHandle>();
 	}
@@ -327,17 +331,18 @@ public class Consumer implements Client {
 /* viewType:- RDMUser.View.FIELD_ID_LIST or RDMUser.View.ELEMENT_NAME_LIST */
 		item_stream.setView (instrument.getFields());
 
-		StringBuilder key = new StringBuilder()
-					.append (instrument.getService())
-					.append ('.')
-					.append (instrument.getName());
+/* Construct directory unique key */
+		this.sb.setLength (0);
+		this.sb	.append (instrument.getService())
+			.append ('.')
+			.append (instrument.getName());
 		if (!this.is_muted) {
 			if (this.config.getProtocol().equalsIgnoreCase (RSSL_PROTOCOL))
 				this.sendItemRequest (item_stream);
 			else if (this.config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL))
 				this.addSubscription (item_stream);
 		}
-		this.directory.put (key.toString(), item_stream);
+		this.directory.put (this.sb.toString(), item_stream);
 		LOG.trace ("Directory size: {}", this.directory.size());
 	}
 
@@ -421,16 +426,17 @@ public class Consumer implements Client {
 			attribInfo.setApplicationId (this.config.getApplicationId());
 
 /* DACS Position name (optional).
- * e.g. "localhost"
+ * e.g. "127.0.0.1/net"
  */
 		if (this.config.hasPosition()) {
 			if (!this.config.getPosition().isEmpty())
 				attribInfo.setPosition (this.config.getPosition());
 		} else {
-			StringBuilder position = new StringBuilder (InetAddress.getLocalHost().getHostAddress());
-			position.append ('/');
-			position.append (InetAddress.getLocalHost().getHostName());
-			attribInfo.setPosition (position.toString());
+			this.sb.setLength (0);
+			this.sb .append (InetAddress.getLocalHost().getHostAddress())
+				.append ('/')
+				.append (InetAddress.getLocalHost().getHostName());
+			attribInfo.setPosition (this.sb.toString());
 		}
 
 /* Instance Id (optional).
@@ -933,31 +939,31 @@ public class Consumer implements Client {
 		}
 
 		if (MarketDataEnums.DataFormat.MARKETFEED != event.getDataFormat()) {
-			StringBuilder format = new StringBuilder();
+			this.sb.setLength (0);
 			switch (event.getDataFormat()) {
 			case MarketDataEnums.DataFormat.UNKNOWN:
-				format.append ("Unknown");
+				this.sb.append ("Unknown");
 				break;
 			case MarketDataEnums.DataFormat.ANSI_PAGE:
-				format.append ("ANSI_Page");
+				this.sb.append ("ANSI_Page");
 				break;
 			case MarketDataEnums.DataFormat.MARKETFEED:
-				format.append ("Marketfeed");
+				this.sb.append ("Marketfeed");
 				break;
 			case MarketDataEnums.DataFormat.QFORM:
-				format.append ("QForm");
+				this.sb.append ("QForm");
 				break;
 /* TibMsg self-describing */
 			case MarketDataEnums.DataFormat.TIBMSG:
-				format.append ("TibMsg");
+				this.sb.append ("TibMsg");
 				break;
 			case MarketDataEnums.DataFormat.IFORM:
 			default:
-				format.append (event.getDataFormat());
+				this.sb.append (event.getDataFormat());
 				break;
 			}
 
-			LOG.trace ("Unsupported data format ({}) in market data item event.", format.toString());
+			LOG.trace ("Unsupported data format ({}) in market data item event.", this.sb.toString());
 			return;
 		}
 
@@ -984,8 +990,8 @@ public class Consumer implements Client {
 
 /* ICAP output here, do not use GSON as fields map would be expensive to create. */
 			final ItemStream item_stream = (ItemStream)event.getClosure();
-			StringBuilder icap = new StringBuilder()
-				.append ('{')
+			this.sb.setLength (0);
+			this.sb .append ('{')
 				 .append ("\"timestamp\":\"").append (dt.toString()).append ('\"')
 				.append (",\"type\":\"UPDATE\"")
 				.append (",\"service\":\"").append (item_stream.getServiceName()).append ('\"')
@@ -993,11 +999,11 @@ public class Consumer implements Client {
 				.append (",\"fields\":{");
 			final String[] view = item_stream.getView();
 			for (int i = 0; i < view.length; ++i) {
-				if (i > 0) icap.append (',');
-				icap.append ('\"').append (view[i]).append ("\":").append (this.msg.Get (view[i]).StringData());
+				if (i > 0) this.sb.append (',');
+				this.sb.append ('\"').append (view[i]).append ("\":").append (this.msg.Get (view[i]).StringData());
 			}
-			icap.append ("}}");
-			LOG.info (ICAP_MARKER, icap.toString());
+			this.sb.append ("}}");
+			LOG.info (ICAP_MARKER, this.sb.toString());
 		} catch (TibException e) {
 			LOG.trace ("Unable to unpack data with TibMsg: {}", e.getMessage());
 		}
