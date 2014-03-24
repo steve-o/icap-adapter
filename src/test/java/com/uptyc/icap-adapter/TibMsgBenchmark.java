@@ -8,6 +8,7 @@ import com.google.caliper.Benchmark;
 import com.google.caliper.api.Macrobenchmark;
 import com.google.caliper.api.VmOptions;
 import com.google.common.base.Optional;
+import com.reuters.tibmsg.Tib;
 import com.reuters.tibmsg.TibField;
 import com.reuters.tibmsg.TibMsg;
 
@@ -90,16 +91,16 @@ public class TibMsgBenchmark {
 		}
 		try {
 			tibmsg = new TibMsg();
-			tibmsg.Append ("BID", 21.42, 18);
-			tibmsg.Append ("ASK", 21.43, 18);
+			tibmsg.Append ("BID", 21.42, Tib.HINT_DECIMAL_2);
+			tibmsg.Append ("ASK", 21.43, Tib.HINT_DECIMAL_2);
 			tibmsg.Append ("BIDSIZE", 7.0, 0);
 			tibmsg.Append ("ASKSIZE", 7.0, 0);
-			tibmsg.Append ("PRC_QL_CD", "0", 261);
+			tibmsg.Append ("PRC_QL_CD", "0", Tib.HINT_MFEED_ENUMERATED);
 			tibmsg.Append ("BID_MMID1", "NAS ");
 			tibmsg.Append ("ASK_MMID1", "NAS ");
 			tibmsg.Append ("GV1_TEXT", "A     ");
-			tibmsg.Append ("QUOTIM", "14:33:44", 260);	// time seconds
-			tibmsg.Append ("PRC_QL3", "0", 261);		// enumerated
+			tibmsg.Append ("QUOTIM", "14:33:44", Tib.HINT_MFEED_TIME_SECONDS);
+			tibmsg.Append ("PRC_QL3", "0", Tib.HINT_MFEED_ENUMERATED);
 			tibmsg.Append ("QUOTIM_MS", 52424789.0, 0);
 		} catch (com.reuters.tibmsg.TibException e) {
 			throw new AssertionError (e);
