@@ -18,6 +18,11 @@ public class TibMsgBenchmark {
 	private TibField field;
 	private Map map;
 
+	private static final char FS = 0x1c;	// file separator
+	private static final char GS = 0x1d;	// group separator
+	private static final char RS = 0x1e;	// record separator
+	private static final char US = 0x1f;	// unit separator
+
 /* Global dictionary, read only once:
  * com.reuters.tibmsg.TibException: Specified data dictionary has already been loaded/unpacked
  */
@@ -43,12 +48,41 @@ public class TibMsgBenchmark {
  */
 	@BeforeExperiment void setUp() {
 		try {
-			byte[] raw = new java.math.BigInteger (new String (
-  "1c333136 1f58581d 54494258 2e4f1f33 31343234 1e32321f 2b32312e 34321e32"
-+ "351f2b32 312e3433 1e33301f 2b371e33 311f2b37 1e313138 1f301e32 39331f4e"
-+ "4153201e 3239361f 4e415320 1e313030 301f4120 20202020 1e313032 351f3134"
-+ "3a33333a 34341e33 3236341f 301e3338 35351f2b 35323432 34373839 1c"
-				).replaceAll ("\\s+",""), 16).toByteArray();
+			StringBuilder sb = new StringBuilder();
+/* <FS>316<US>TAG<GS>RIC[<US>RTL]{<RS>FID<US>VALUE}<FS> */
+			sb	.append (FS)
+				.append ("316")		// Update Record (316)
+				.append (US)
+				.append ("XX")		// TAG is a two-character code used to track response.
+				.append (GS)
+				.append ("TIBX.O")	// RIC
+				.append (US)
+				.append ("31424")	// RTL: Record transaction level.
+/* <RS>FID<US>VALUE */
+// BID
+				.append (RS).append ("22").append (US).append ("+21.42")
+// ASK
+				.append (RS).append ("25").append (US).append ("+21.43")
+// BIDSIZE
+				.append (RS).append ("30").append (US).append ("+7")
+// ASKSIZE
+				.append (RS).append ("31").append (US).append ("+7")
+// PRC_QL_CD
+				.append (RS).append ("118").append (US).append ("0")
+// BID_MMID1
+				.append (RS).append ("293").append (US).append ("NAS ")
+// ASK_MMID1
+				.append (RS).append ("296").append (US).append ("NAS ")
+// GV1_TEXT
+				.append (RS).append ("1000").append (US).append ("A     ")
+// QUOTIM
+				.append (RS).append ("1025").append (US).append ("14:33:44")
+// PRC_QL3
+				.append (RS).append ("3264").append (US).append ("0")
+// QUOTIM_MS
+				.append (RS).append ("3855").append (US).append ("+52424789")
+				.append (FS);
+			byte[] raw = sb.toString().getBytes();
 			mfeed = new TibMsg();
 			mfeed.UnPack (raw);
 		} catch (com.reuters.tibmsg.TibException e) {
