@@ -93,15 +93,17 @@ public class TibMsgBenchmark {
 			tibmsg = new TibMsg();
 			tibmsg.Append ("BID", 21.42, Tib.HINT_DECIMAL_2);
 			tibmsg.Append ("ASK", 21.43, Tib.HINT_DECIMAL_2);
-			tibmsg.Append ("BIDSIZE", 7.0, 0);
-			tibmsg.Append ("ASKSIZE", 7.0, 0);
+			tibmsg.Append ("BIDSIZE", 7.0, Tib.HINT_DENOM_NONE);
+			tibmsg.Append ("ASKSIZE", 7.0, Tib.HINT_DENOM_NONE);
+// VALUE:0 DISPLAY:"   " MEANING:normal market or not allocated
 			tibmsg.Append ("PRC_QL_CD", "0", Tib.HINT_MFEED_ENUMERATED);
 			tibmsg.Append ("BID_MMID1", "NAS ");
 			tibmsg.Append ("ASK_MMID1", "NAS ");
 			tibmsg.Append ("GV1_TEXT", "A     ");
 			tibmsg.Append ("QUOTIM", "14:33:44", Tib.HINT_MFEED_TIME_SECONDS);
+// VALUE:0 DISPLAY:"   " MEANING:normal market or not allocated
 			tibmsg.Append ("PRC_QL3", "0", Tib.HINT_MFEED_ENUMERATED);
-			tibmsg.Append ("QUOTIM_MS", 52424789.0, 0);
+			tibmsg.Append ("QUOTIM_MS", 52424789.0, Tib.HINT_DENOM_NONE);
 		} catch (com.reuters.tibmsg.TibException e) {
 			throw new AssertionError (e);
 		}
