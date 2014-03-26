@@ -1,15 +1,18 @@
 package com.uptyc.IcapAdapter;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import com.google.caliper.BeforeExperiment;
 import com.google.caliper.Benchmark;
 import com.google.caliper.api.Macrobenchmark;
 import com.google.caliper.api.VmOptions;
-import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.reuters.tibmsg.Tib;
 import com.reuters.tibmsg.TibField;
 import com.reuters.tibmsg.TibMsg;
@@ -20,7 +23,9 @@ public class TibMsgBenchmark {
 
 	private TibMsg mfeed, tibmsg;
 	private TibField field;
-	private Map map;
+	private Set<String> name_set;
+	private Map<String, String> name_map;
+	private Map<String, TibField> value_map;
 
 	private static final char FS = 0x1c;	// file separator
 	private static final char GS = 0x1d;	// group separator
@@ -53,16 +58,16 @@ public class TibMsgBenchmark {
 	@BeforeExperiment void setUp() {
 		try {
 /* build dictionary map */
-			this.map = new LinkedHashMap<String, String> (TibMsg.GetMfeedDictNumFids());
+			final Map<String, String> map = Maps.newLinkedHashMap();
 			if (TibMsg.GetMfeedDictNumFids() > 0) {
 				final TibMfeedDict mfeed_dictionary[] = TibMsg.GetMfeedDictionary();
 				for (int i = 0; i < mfeed_dictionary.length; i++) {
 					if (null == mfeed_dictionary[i]) continue;
 					final int fid = (i > TibMsg.GetMfeedDictPosFids()) ? (TibMsg.GetMfeedDictPosFids() - i) : i;
-					this.map.put (mfeed_dictionary[i].fname, Integer.toString (fid));
+					map.put (mfeed_dictionary[i].fname, Integer.toString (fid));
 				}
 			}
-			final ImmutableMap<String, String> appendix_a = ImmutableMap.copyOf (this.map);
+			final ImmutableMap<String, String> appendix_a = ImmutableMap.copyOf (map);
 			StringBuilder sb = new StringBuilder();
 /* <FS>316<US>TAG<GS>RIC[<US>RTL]{<RS>FID<US>VALUE}<FS> */
 			sb	.append (FS)
@@ -112,6 +117,9 @@ public class TibMsgBenchmark {
 		}
 
 		field = new TibField();
+		name_set = Sets.newHashSet ("BID", "ASK");
+		name_map = Maps.newHashMapWithExpectedSize (2);
+		value_map = Maps.newHashMap();
 	}
 
 	@Benchmark long MarketFeedGet (int reps) {
@@ -149,10 +157,11 @@ public class TibMsgBenchmark {
 				TibMsg.TIBMSG_OK == status;
 				status = field.Next())
 			{
-				if (field.Name().equals ("BID"))
+				if (field.Name().equals ("BID")) 
 					bid = field.StringData();
 				else if (field.Name().equals ("ASK"))
 					ask = field.StringData();
+				else continue;
 				if (null != bid && null != ask) break;
 			}
 			dummy |= bid.hashCode();
@@ -174,6 +183,7 @@ public class TibMsgBenchmark {
 					bid = field.StringData();
 				else if (field.Name().equals ("ASK"))
 					ask = field.StringData();
+				else continue;
 				if (null != bid && null != ask) break;
 			}
 			dummy |= bid.hashCode();
@@ -185,18 +195,18 @@ public class TibMsgBenchmark {
 	@Benchmark long MarketFeedNameHashMap (int reps) {
 		long dummy = 0;
 		for (int i = 0; i < reps; ++i) {
-			map = new HashMap<String, Optional<String>> (2);
-			map.put ("BID", Optional.absent());
-			map.put ("ASK", Optional.absent());
+			name_map.clear();
 			for (int status = field.First (mfeed);
 				TibMsg.TIBMSG_OK == status;
 				status = field.Next())
 			{
-				if (map.containsKey (field.Name()))
-					map.put (field.Name(), Optional.of (field.StringData()));
+				if (name_set.contains (field.Name())) {
+					name_map.put (field.Name(), field.StringData());
+					if (name_map.size() == name_set.size()) break;
+				}
 			}
-			dummy |= ((Optional<String>)map.get ("BID")).get().hashCode();
-			dummy |= ((Optional<String>)map.get ("ASK")).get().hashCode();
+			dummy |= name_map.get ("BID").hashCode();
+			dummy |= name_map.get ("ASK").hashCode();
 		}
 		return dummy;
 	}
@@ -204,16 +214,16 @@ public class TibMsgBenchmark {
 	@Benchmark long MarketFeedValueHashMap (int reps) {
 		long dummy = 0;
 		for (int i = 0; i < reps; ++i) {
-			map = new HashMap<String, TibField>();
+			value_map.clear();
 			for (int status = field.First (mfeed);
 				TibMsg.TIBMSG_OK == status;
 				status = field.Next())
 			{
-				map.put (field.Name(), new TibField (field.Name(), field.Data(), field.HintData()));
+				value_map.put (field.Name(), new TibField (field.Name(), field.Data(), field.HintData()));
 			}
 
-			dummy |= ((TibField)map.get ("BID")).StringData().hashCode();
-			dummy |= ((TibField)map.get ("ASK")).StringData().hashCode();
+			dummy |= value_map.get ("BID").StringData().hashCode();
+			dummy |= value_map.get ("ASK").StringData().hashCode();
 		}
 		return dummy;
 	}
@@ -221,18 +231,18 @@ public class TibMsgBenchmark {
 	@Benchmark long MarketFeedNameTreeMap (int reps) {
 		long dummy = 0;
 		for (int i = 0; i < reps; ++i) {
-			map = new HashMap<String, Optional<String>> (2);
-			map.put ("BID", Optional.absent());
-			map.put ("ASK", Optional.absent());
+			name_map.clear();
 			for (int status = field.First (mfeed);
 				TibMsg.TIBMSG_OK == status;
 				status = field.Next())
 			{
-				if (map.containsKey (field.Name()))
-					map.put (field.Name(), Optional.of (field.StringData()));
+				if (name_set.contains (field.Name())) {
+					name_map.put (field.Name(), field.StringData());
+					if (name_map.size() == name_set.size()) break;
+				}
 			}
-			dummy |= ((Optional<String>)map.get ("BID")).get().hashCode();
-			dummy |= ((Optional<String>)map.get ("ASK")).get().hashCode();
+			dummy |= name_map.get ("BID").hashCode();
+			dummy |= name_map.get ("ASK").hashCode();
 		}
 		return dummy;
 	}
@@ -240,16 +250,16 @@ public class TibMsgBenchmark {
 	@Benchmark long MarketFeedValueTreeMap (int reps) {
 		long dummy = 0;
 		for (int i = 0; i < reps; ++i) {
-			map = new TreeMap<String, TibField>();
+			value_map.clear();
 			for (int status = field.First (mfeed);
 				TibMsg.TIBMSG_OK == status;
 				status = field.Next())
 			{
-				map.put (field.Name(), new TibField (field.Name(), field.Data(), field.HintData()));
+				value_map.put (field.Name(), new TibField (field.Name(), field.Data(), field.HintData()));
 			}
 
-			dummy |= ((TibField)map.get ("BID")).StringData().hashCode();
-			dummy |= ((TibField)map.get ("ASK")).StringData().hashCode();
+			dummy |= value_map.get ("BID").StringData().hashCode();
+			dummy |= value_map.get ("ASK").StringData().hashCode();
 		}
 		return dummy;
 	}
