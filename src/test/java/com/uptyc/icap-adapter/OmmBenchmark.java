@@ -7,6 +7,7 @@ import com.google.caliper.Benchmark;
 import com.google.caliper.api.Macrobenchmark;
 import com.google.caliper.api.VmOptions;
 import com.google.common.base.Optional;
+import com.google.common.collect.ImmutableMap;
 import com.reuters.rfa.common.Context;
 import com.reuters.rfa.dictionary.FidDef;
 import com.reuters.rfa.dictionary.FieldDictionary;
@@ -38,8 +39,8 @@ public class OmmBenchmark {
 		dictionary = FieldDictionary.create();
 		FieldDictionary.readRDMFieldDictionary (dictionary, "RDMFieldDictionary");
 		FieldDictionary.readEnumTypeDef (dictionary, "enumtype.def");
-		biddef = dictionary.getFidDef ((short)22);
-		askdef = dictionary.getFidDef ((short)25);
+		biddef = dictionary.getFidDef ("BID");
+		askdef = dictionary.getFidDef ("ASK");
 	}
 
 /* BID            : REAL      8 : 21.42 <18>		// TSS_HINT_DECIMAL_2
@@ -90,38 +91,28 @@ public class OmmBenchmark {
 				(short)1,	/* dictionaryId */
 				(short)78,	/* fieldListNumber */
 				(short)0);	/* dataDefId */
-// BID
-		encoder.encodeFieldEntryInit ((short)22, OMMTypes.REAL);
+		final ImmutableMap<String, FidDef> dict = ImmutableMap.copyOf (dictionary.toNameMap());
+		encoder.encodeFieldEntryInit (dict.get ("BID").getFieldId(), OMMTypes.REAL);
 		encoder.encodeReal ((long)(21.42 * 100), OMMNumeric.EXPONENT_NEG2);
-// ASK
-		encoder.encodeFieldEntryInit ((short)25, OMMTypes.REAL);
+		encoder.encodeFieldEntryInit (dict.get ("ASK").getFieldId(), OMMTypes.REAL);
 		encoder.encodeReal ((long)(21.43 * 100), OMMNumeric.EXPONENT_NEG2);
-// BIDSIZE
-		encoder.encodeFieldEntryInit ((short)30, OMMTypes.REAL);
+		encoder.encodeFieldEntryInit (dict.get ("BIDSIZE").getFieldId(), OMMTypes.REAL);
 		encoder.encodeReal (7L, OMMNumeric.EXPONENT_0);
-// ASKSIZE
-		encoder.encodeFieldEntryInit ((short)31, OMMTypes.REAL);
+		encoder.encodeFieldEntryInit (dict.get ("ASKSIZE").getFieldId(), OMMTypes.REAL);
 		encoder.encodeReal (7L, OMMNumeric.EXPONENT_0);
-// PRC_QL_CD
- 		encoder.encodeFieldEntryInit ((short)118, OMMTypes.ENUM);
+ 		encoder.encodeFieldEntryInit (dict.get ("PRC_QL_CD").getFieldId(), OMMTypes.ENUM);
 		encoder.encodeEnum (0);
-// BID_MMID1
- 		encoder.encodeFieldEntryInit ((short)293, OMMTypes.RMTES_STRING);
+ 		encoder.encodeFieldEntryInit (dict.get ("BID_MMID1").getFieldId(), OMMTypes.RMTES_STRING);
 		encoder.encodeString ("NAS", OMMTypes.RMTES_STRING);
-// ASK_MMID1
- 		encoder.encodeFieldEntryInit ((short)296, OMMTypes.RMTES_STRING);
+ 		encoder.encodeFieldEntryInit (dict.get ("ASK_MMID1").getFieldId(), OMMTypes.RMTES_STRING);
 		encoder.encodeString ("NAS", OMMTypes.RMTES_STRING);
-// GV1_TEXT
- 		encoder.encodeFieldEntryInit ((short)1000, OMMTypes.RMTES_STRING);
+ 		encoder.encodeFieldEntryInit (dict.get ("GV1_TEXT").getFieldId(), OMMTypes.RMTES_STRING);
 		encoder.encodeString ("A", OMMTypes.RMTES_STRING);
-// QUOTIM
- 		encoder.encodeFieldEntryInit ((short)1025, OMMTypes.TIME);
+ 		encoder.encodeFieldEntryInit (dict.get ("QUOTIM").getFieldId(), OMMTypes.TIME);
 		encoder.encodeTime (14, 33, 44, 0);
-// PRC_QL3
- 		encoder.encodeFieldEntryInit ((short)3264, OMMTypes.ENUM);
+ 		encoder.encodeFieldEntryInit (dict.get ("PRC_QL3").getFieldId(), OMMTypes.ENUM);
 		encoder.encodeEnum (0);
-// QUOTIM_MS
- 		encoder.encodeFieldEntryInit ((short)3855, OMMTypes.UINT);
+ 		encoder.encodeFieldEntryInit (dict.get ("QUOTIM_MS").getFieldId(), OMMTypes.UINT);
 		encoder.encodeUInt (52424789L);
 		encoder.encodeAggregateComplete();
 		msg = (OMMMsg)encoder.getEncodedObject();
