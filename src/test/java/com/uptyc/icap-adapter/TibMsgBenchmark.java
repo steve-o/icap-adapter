@@ -1,6 +1,7 @@
 package com.uptyc.IcapAdapter;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import com.google.caliper.BeforeExperiment;
@@ -8,9 +9,11 @@ import com.google.caliper.Benchmark;
 import com.google.caliper.api.Macrobenchmark;
 import com.google.caliper.api.VmOptions;
 import com.google.common.base.Optional;
+import com.google.common.collect.ImmutableMap;
 import com.reuters.tibmsg.Tib;
 import com.reuters.tibmsg.TibField;
 import com.reuters.tibmsg.TibMsg;
+import com.reuters.tibmsg.TibMfeedDict;
 
 @VmOptions("-server")
 public class TibMsgBenchmark {
@@ -49,6 +52,17 @@ public class TibMsgBenchmark {
  */
 	@BeforeExperiment void setUp() {
 		try {
+/* build dictionary map */
+			this.map = new LinkedHashMap<String, String> (TibMsg.GetMfeedDictNumFids());
+			if (TibMsg.GetMfeedDictNumFids() > 0) {
+				final TibMfeedDict mfeed_dictionary[] = TibMsg.GetMfeedDictionary();
+				for (int i = 0; i < mfeed_dictionary.length; i++) {
+					if (null == mfeed_dictionary[i]) continue;
+					final int fid = (i > TibMsg.GetMfeedDictPosFids()) ? (TibMsg.GetMfeedDictPosFids() - i) : i;
+					this.map.put (mfeed_dictionary[i].fname, Integer.toString (fid));
+				}
+			}
+			final ImmutableMap<String, String> appendix_a = ImmutableMap.copyOf (this.map);
 			StringBuilder sb = new StringBuilder();
 /* <FS>316<US>TAG<GS>RIC[<US>RTL]{<RS>FID<US>VALUE}<FS> */
 			sb	.append (FS)
@@ -60,28 +74,17 @@ public class TibMsgBenchmark {
 				.append (US)
 				.append ("31424")	// RTL: Record transaction level.
 /* <RS>FID<US>VALUE */
-// BID
-				.append (RS).append ("22").append (US).append ("+21.42")
-// ASK
-				.append (RS).append ("25").append (US).append ("+21.43")
-// BIDSIZE
-				.append (RS).append ("30").append (US).append ("+7")
-// ASKSIZE
-				.append (RS).append ("31").append (US).append ("+7")
-// PRC_QL_CD
-				.append (RS).append ("118").append (US).append ("0")
-// BID_MMID1
-				.append (RS).append ("293").append (US).append ("NAS ")
-// ASK_MMID1
-				.append (RS).append ("296").append (US).append ("NAS ")
-// GV1_TEXT
-				.append (RS).append ("1000").append (US).append ("A     ")
-// QUOTIM
-				.append (RS).append ("1025").append (US).append ("14:33:44")
-// PRC_QL3
-				.append (RS).append ("3264").append (US).append ("0")
-// QUOTIM_MS
-				.append (RS).append ("3855").append (US).append ("+52424789")
+				.append (RS).append (appendix_a.get ("BID")).append (US).append ("+21.42")
+				.append (RS).append (appendix_a.get ("ASK")).append (US).append ("+21.43")
+				.append (RS).append (appendix_a.get ("BIDSIZE")).append (US).append ("+7")
+				.append (RS).append (appendix_a.get ("ASKSIZE")).append (US).append ("+7")
+				.append (RS).append (appendix_a.get ("PRC_QL_CD")).append (US).append ("0")
+				.append (RS).append (appendix_a.get ("BID_MMID1")).append (US).append ("NAS ")
+				.append (RS).append (appendix_a.get ("ASK_MMID1")).append (US).append ("NAS ")
+				.append (RS).append (appendix_a.get ("GV1_TEXT")).append (US).append ("A     ")
+				.append (RS).append (appendix_a.get ("QUOTIM")).append (US).append ("14:33:44")
+				.append (RS).append (appendix_a.get ("PRC_QL3")).append (US).append ("0")
+				.append (RS).append (appendix_a.get ("QUOTIM_MS")).append (US).append ("+52424789")
 				.append (FS);
 			byte[] raw = sb.toString().getBytes();
 			mfeed = new TibMsg();
@@ -239,78 +242,6 @@ public class TibMsgBenchmark {
 		for (int i = 0; i < reps; ++i) {
 			map = new TreeMap<String, TibField>();
 			for (int status = field.First (mfeed);
-				TibMsg.TIBMSG_OK == status;
-				status = field.Next())
-			{
-				map.put (field.Name(), new TibField (field.Name(), field.Data(), field.HintData()));
-			}
-
-			dummy |= ((TibField)map.get ("BID")).StringData().hashCode();
-			dummy |= ((TibField)map.get ("ASK")).StringData().hashCode();
-		}
-		return dummy;
-	}
-
-	@Benchmark long TibMsgNameHashMap (int reps) {
-		long dummy = 0;
-		for (int i = 0; i < reps; ++i) {
-			map = new HashMap<String, Optional<String>> (2);
-			map.put ("BID", Optional.absent());
-			map.put ("ASK", Optional.absent());
-			for (int status = field.First (tibmsg);
-				TibMsg.TIBMSG_OK == status;
-				status = field.Next())
-			{
-				if (map.containsKey (field.Name()))
-					map.put (field.Name(), Optional.of (field.StringData()));
-			}
-			dummy |= ((Optional<String>)map.get ("BID")).get().hashCode();
-			dummy |= ((Optional<String>)map.get ("ASK")).get().hashCode();
-		}
-		return dummy;
-	}
-
-	@Benchmark long TibMsgValueHashMap (int reps) {
-		long dummy = 0;
-		for (int i = 0; i < reps; ++i) {
-			map = new HashMap<String, TibField>();
-			for (int status = field.First (tibmsg);
-				TibMsg.TIBMSG_OK == status;
-				status = field.Next())
-			{
-				map.put (field.Name(), new TibField (field.Name(), field.Data(), field.HintData()));
-			}
-
-			dummy |= ((TibField)map.get ("BID")).StringData().hashCode();
-			dummy |= ((TibField)map.get ("ASK")).StringData().hashCode();
-		}
-		return dummy;
-	}
-
-	@Benchmark long TibMsgNameTreeMap (int reps) {
-		long dummy = 0;
-		for (int i = 0; i < reps; ++i) {
-			map = new HashMap<String, Optional<String>> (2);
-			map.put ("BID", Optional.absent());
-			map.put ("ASK", Optional.absent());
-			for (int status = field.First (tibmsg);
-				TibMsg.TIBMSG_OK == status;
-				status = field.Next())
-			{
-				if (map.containsKey (field.Name()))
-					map.put (field.Name(), Optional.of (field.StringData()));
-			}
-			dummy |= ((Optional<String>)map.get ("BID")).get().hashCode();
-			dummy |= ((Optional<String>)map.get ("ASK")).get().hashCode();
-		}
-		return dummy;
-	}
-
-	@Benchmark long TibMsgValueTreeMap (int reps) {
-		long dummy = 0;
-		for (int i = 0; i < reps; ++i) {
-			map = new TreeMap<String, TibField>();
-			for (int status = field.First (tibmsg);
 				TibMsg.TIBMSG_OK == status;
 				status = field.Next())
 			{
