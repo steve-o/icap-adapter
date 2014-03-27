@@ -1,7 +1,7 @@
 /* Rfa context.
  */
 
-package com.uptyc.IcapAdapter;
+package com.sumologic.IcapAdapter;
 
 import java.net.*;
 import org.apache.logging.log4j.LogManager;

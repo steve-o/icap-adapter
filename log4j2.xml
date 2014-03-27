@@ -18,7 +18,7 @@
   </Appenders>
   <Loggers>
     <Logger name="com.reuters.rfa" level="warn"/>
-    <Logger name="com.uptyc.IcapAdapter.Consumer" level="info" additivity="false">
+    <Logger name="com.sumologic.IcapAdapter.Consumer" level="info" additivity="false">
       <AppenderRef ref="File"/>
     </Logger>
     <Root level="error">

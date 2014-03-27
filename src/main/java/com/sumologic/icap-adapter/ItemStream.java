@@ -1,7 +1,7 @@
 /* Item stream runtime.
  */
 
-package com.uptyc.IcapAdapter;
+package com.sumologic.IcapAdapter;
 
 import com.google.common.collect.ImmutableSortedSet;
 import com.reuters.rfa.common.Handle;

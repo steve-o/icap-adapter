@@ -1,7 +1,7 @@
 /* Adapter configuration.
  */
 
-package com.uptyc.IcapAdapter;
+package com.sumologic.IcapAdapter;
 
 import com.google.gson.Gson;
 

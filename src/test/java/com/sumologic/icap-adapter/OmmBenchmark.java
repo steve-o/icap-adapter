@@ -1,4 +1,4 @@
-package com.uptyc.IcapAdapter;
+package com.sumologic.IcapAdapter;
 
 import java.util.Iterator;
 import com.google.caliper.AfterExperiment;

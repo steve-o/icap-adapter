@@ -1,7 +1,7 @@
 /* Simple consumer.
  */
 
-package com.uptyc.IcapAdapter;
+package com.sumologic.IcapAdapter;
 
 import java.util.*;
 import java.net.*;

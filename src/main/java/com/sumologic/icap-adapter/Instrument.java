@@ -1,7 +1,7 @@
 /* Subscription symbol.
  */
 
-package com.uptyc.IcapAdapter;
+package com.sumologic.IcapAdapter;
 
 import com.reuters.rfa.common.Handle;
 import com.google.gson.Gson;

@@ -1,7 +1,7 @@
 /* ICAP Streaming Adapter.
  */
 
-package com.uptyc.IcapAdapter;
+package com.sumologic.IcapAdapter;
 
 import java.io.*;
 import java.util.*;
