@@ -1,18 +1,22 @@
 package com.uptyc.IcapAdapter;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import com.google.caliper.BeforeExperiment;
 import com.google.caliper.Benchmark;
 import com.google.caliper.api.Macrobenchmark;
 import com.google.caliper.api.VmOptions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.primitives.Ints;
 import com.reuters.tibmsg.Tib;
 import com.reuters.tibmsg.TibField;
 import com.reuters.tibmsg.TibMsg;
@@ -23,9 +27,12 @@ public class TibMsgBenchmark {
 
 	private TibMsg mfeed, tibmsg;
 	private TibField field;
-	private Set<String> name_set;
-	private Map<String, String> name_map;
-	private Map<String, TibField> value_map;
+	private ImmutableSortedSet<String> name_set;
+	private ImmutableSortedSet<Integer> fid_set;
+	private Map<String, String> name_hashmap, name_treemap;
+	private Map<Integer, String> fid_hashmap, fid_treemap;
+	private Map<String, TibField> value_hashmap, value_treemap;
+	private int bid_fid, ask_fid;
 
 	private static final char FS = 0x1c;	// file separator
 	private static final char GS = 0x1d;	// group separator
@@ -68,6 +75,9 @@ public class TibMsgBenchmark {
 				}
 			}
 			final ImmutableMap<String, String> appendix_a = ImmutableMap.copyOf (map);
+/* copy out BID and ASK fids */
+			bid_fid = Integer.parseInt (appendix_a.get ("BID"));
+			ask_fid = Integer.parseInt (appendix_a.get ("ASK"));
 			StringBuilder sb = new StringBuilder();
 /* <FS>316<US>TAG<GS>RIC[<US>RTL]{<RS>FID<US>VALUE}<FS> */
 			sb	.append (FS)
@@ -117,9 +127,14 @@ public class TibMsgBenchmark {
 		}
 
 		field = new TibField();
-		name_set = Sets.newHashSet ("BID", "ASK");
-		name_map = Maps.newHashMapWithExpectedSize (2);
-		value_map = Maps.newHashMap();
+		name_set = ImmutableSortedSet.of ("BID", "ASK");
+		fid_set = ImmutableSortedSet.copyOf (new Integer[] { bid_fid, ask_fid });
+		name_hashmap = Maps.newHashMapWithExpectedSize (2);
+		name_treemap = Maps.newTreeMap();
+		fid_hashmap = Maps.newHashMapWithExpectedSize (2);
+		fid_treemap = Maps.newTreeMap();
+		value_hashmap = Maps.newHashMap();
+		value_treemap = Maps.newTreeMap();
 	}
 
 	@Benchmark long MarketFeedGet (int reps) {
@@ -148,7 +163,7 @@ public class TibMsgBenchmark {
 		return dummy;
 	}
 
-	@Benchmark long MarketFeedIterate (int reps) {
+	@Benchmark long MarketFeedIterateByName (int reps) {
 		long dummy = 0;
 		String bid, ask;
 		for (int i = 0; i < reps; ++i) {
@@ -160,6 +175,28 @@ public class TibMsgBenchmark {
 				if (field.Name().equals ("BID")) 
 					bid = field.StringData();
 				else if (field.Name().equals ("ASK"))
+					ask = field.StringData();
+				else continue;
+				if (null != bid && null != ask) break;
+			}
+			dummy |= bid.hashCode();
+			dummy |= ask.hashCode();
+		}
+		return dummy;
+	}
+
+	@Benchmark long MarketFeedIterateByFid (int reps) {
+		long dummy = 0;
+		String bid, ask;
+		for (int i = 0; i < reps; ++i) {
+			bid = ask = null;
+			for (int status = field.First (mfeed);
+				TibMsg.TIBMSG_OK == status;
+				status = field.Next())
+			{
+				if (field.MfeedFid() == bid_fid)
+					bid = field.StringData();
+				else if (field.MfeedFid() == ask_fid)
 					ask = field.StringData();
 				else continue;
 				if (null != bid && null != ask) break;
@@ -195,18 +232,37 @@ public class TibMsgBenchmark {
 	@Benchmark long MarketFeedNameHashMap (int reps) {
 		long dummy = 0;
 		for (int i = 0; i < reps; ++i) {
-			name_map.clear();
+			name_hashmap.clear();
 			for (int status = field.First (mfeed);
 				TibMsg.TIBMSG_OK == status;
 				status = field.Next())
 			{
 				if (name_set.contains (field.Name())) {
-					name_map.put (field.Name(), field.StringData());
-					if (name_map.size() == name_set.size()) break;
+					name_hashmap.put (field.Name(), field.StringData());
+					if (name_hashmap.size() == name_set.size()) break;
 				}
 			}
-			dummy |= name_map.get ("BID").hashCode();
-			dummy |= name_map.get ("ASK").hashCode();
+			dummy |= name_hashmap.get ("BID").hashCode();
+			dummy |= name_hashmap.get ("ASK").hashCode();
+		}
+		return dummy;
+	}
+
+	@Benchmark long MarketFeedFidHashMap (int reps) {
+		long dummy = 0;
+		for (int i = 0; i < reps; ++i) {
+			fid_hashmap.clear();
+			for (int status = field.First (mfeed);
+				TibMsg.TIBMSG_OK == status;
+				status = field.Next())
+			{
+				if (fid_set.contains (field.MfeedFid())) {
+					fid_hashmap.put (field.MfeedFid(), field.StringData());
+					if (fid_hashmap.size() == fid_set.size()) break;
+				}
+			}
+			dummy |= fid_hashmap.get (bid_fid).hashCode();
+			dummy |= fid_hashmap.get (ask_fid).hashCode();
 		}
 		return dummy;
 	}
@@ -214,16 +270,16 @@ public class TibMsgBenchmark {
 	@Benchmark long MarketFeedValueHashMap (int reps) {
 		long dummy = 0;
 		for (int i = 0; i < reps; ++i) {
-			value_map.clear();
+			value_hashmap.clear();
 			for (int status = field.First (mfeed);
 				TibMsg.TIBMSG_OK == status;
 				status = field.Next())
 			{
-				value_map.put (field.Name(), new TibField (field.Name(), field.Data(), field.HintData()));
+				value_hashmap.put (field.Name(), new TibField (field.Name(), field.Data(), field.HintData()));
 			}
 
-			dummy |= value_map.get ("BID").StringData().hashCode();
-			dummy |= value_map.get ("ASK").StringData().hashCode();
+			dummy |= value_hashmap.get ("BID").StringData().hashCode();
+			dummy |= value_hashmap.get ("ASK").StringData().hashCode();
 		}
 		return dummy;
 	}
@@ -231,18 +287,37 @@ public class TibMsgBenchmark {
 	@Benchmark long MarketFeedNameTreeMap (int reps) {
 		long dummy = 0;
 		for (int i = 0; i < reps; ++i) {
-			name_map.clear();
+			name_treemap.clear();
 			for (int status = field.First (mfeed);
 				TibMsg.TIBMSG_OK == status;
 				status = field.Next())
 			{
 				if (name_set.contains (field.Name())) {
-					name_map.put (field.Name(), field.StringData());
-					if (name_map.size() == name_set.size()) break;
+					name_treemap.put (field.Name(), field.StringData());
+					if (name_treemap.size() == name_set.size()) break;
 				}
 			}
-			dummy |= name_map.get ("BID").hashCode();
-			dummy |= name_map.get ("ASK").hashCode();
+			dummy |= name_treemap.get ("BID").hashCode();
+			dummy |= name_treemap.get ("ASK").hashCode();
+		}
+		return dummy;
+	}
+
+	@Benchmark long MarketFeedFidTreeMap (int reps) {
+		long dummy = 0;
+		for (int i = 0; i < reps; ++i) {
+			fid_treemap.clear();
+			for (int status = field.First (mfeed);
+				TibMsg.TIBMSG_OK == status;
+				status = field.Next())
+			{
+				if (fid_set.contains (field.MfeedFid())) {
+					fid_treemap.put (field.MfeedFid(), field.StringData());
+					if (fid_treemap.size() == fid_set.size()) break;
+				}
+			}
+			dummy |= fid_treemap.get (bid_fid).hashCode();
+			dummy |= fid_treemap.get (ask_fid).hashCode();
 		}
 		return dummy;
 	}
@@ -250,16 +325,16 @@ public class TibMsgBenchmark {
 	@Benchmark long MarketFeedValueTreeMap (int reps) {
 		long dummy = 0;
 		for (int i = 0; i < reps; ++i) {
-			value_map.clear();
+			value_treemap.clear();
 			for (int status = field.First (mfeed);
 				TibMsg.TIBMSG_OK == status;
 				status = field.Next())
 			{
-				value_map.put (field.Name(), new TibField (field.Name(), field.Data(), field.HintData()));
+				value_treemap.put (field.Name(), new TibField (field.Name(), field.Data(), field.HintData()));
 			}
 
-			dummy |= value_map.get ("BID").StringData().hashCode();
-			dummy |= value_map.get ("ASK").StringData().hashCode();
+			dummy |= value_treemap.get ("BID").StringData().hashCode();
+			dummy |= value_treemap.get ("ASK").StringData().hashCode();
 		}
 		return dummy;
 	}

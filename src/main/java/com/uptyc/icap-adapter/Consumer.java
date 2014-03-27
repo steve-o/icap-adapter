@@ -11,6 +11,10 @@ import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.MarkerManager;
 import org.joda.time.DateTime;
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.reuters.rfa.common.Client;
@@ -38,13 +42,17 @@ import com.reuters.rfa.omm.OMMTypes;
 import com.reuters.rfa.rdm.RDMInstrument;
 import com.reuters.rfa.rdm.RDMMsgTypes;
 import com.reuters.rfa.rdm.RDMService;
+import com.reuters.rfa.session.DataDictInfo;
 import com.reuters.rfa.session.event.ConnectionEvent;
 import com.reuters.rfa.session.event.EntitlementsAuthenticationEvent;
+import com.reuters.rfa.session.event.MarketDataDictEvent;
+import com.reuters.rfa.session.event.MarketDataDictStatus;
 import com.reuters.rfa.session.event.MarketDataItemEvent;
 import com.reuters.rfa.session.event.MarketDataItemStatus;
 import com.reuters.rfa.session.event.MarketDataSvcEvent;
 import com.reuters.rfa.session.event.MarketDataSvcStatus;
 import com.reuters.rfa.session.Session;
+import com.reuters.rfa.session.MarketDataDictSub;
 import com.reuters.rfa.session.MarketDataEnums;
 import com.reuters.rfa.session.MarketDataItemSub;
 import com.reuters.rfa.session.MarketDataSubscriber;
@@ -59,6 +67,7 @@ import com.reuters.rfa.session.omm.OMMItemIntSpec;
 import com.reuters.tibmsg.TibException;
 import com.reuters.tibmsg.TibField;
 import com.reuters.tibmsg.TibMsg;
+import com.reuters.tibmsg.TibMfeedDict;
 import com.thomsonreuters.rfa.valueadd.domainrep.rdm.dictionary.RDMDictionary;
 import com.thomsonreuters.rfa.valueadd.domainrep.rdm.dictionary.RDMDictionaryCache;
 import com.thomsonreuters.rfa.valueadd.domainrep.rdm.dictionary.RDMDictionaryRequest;
@@ -96,9 +105,11 @@ public class Consumer implements Client {
 	private OMMEncoder omm_encoder;
 
 /* RFA market data subscriber interface. */
+	private MarketDataDictSub market_data_dictionary_subscriber;
 	private MarketDataSubscriber market_data_subscriber;
 	private TibMsg msg;
 	private TibField field;
+	private Set<Integer> field_set;
 
 /* JSON serialisation */
 	private Gson gson;
@@ -138,6 +149,7 @@ public class Consumer implements Client {
 	}
 
 	private Map<String, FlaggedHandle> dictionary_handle;
+	private ImmutableMap<String, Integer> appendix_a;
 
 /* Reuters Wire Format versions. */
 	private byte rwf_major_version;
@@ -215,9 +227,14 @@ public class Consumer implements Client {
 			marketDataSubscriberInterestSpec.setEntitlementsInterest (false);
 			this.error_handle = this.market_data_subscriber.registerClient (this.event_queue, marketDataSubscriberInterestSpec, this, null);
 
+/* Initializing a Market Data Dictionary Subscriber. */
+			this.market_data_dictionary_subscriber = new MarketDataDictSub();
+
 /* TibMsg memory management. */
 			this.msg = new TibMsg();
 			this.field = new TibField();
+
+			this.field_set = Sets.newTreeSet();
 		}
 		else
 		{
@@ -329,7 +346,8 @@ public class Consumer implements Client {
 		item_stream.setItemName (instrument.getName());
 		item_stream.setServiceName (instrument.getService());
 /* viewType:- RDMUser.View.FIELD_ID_LIST or RDMUser.View.ELEMENT_NAME_LIST */
-		item_stream.setView (instrument.getFields());
+		final ImmutableSortedSet<String> view_by_name = ImmutableSortedSet.copyOf (instrument.getFields());
+		item_stream.setViewByName (view_by_name);
 
 /* Construct directory unique key */
 		this.sb.setLength (0);
@@ -337,13 +355,40 @@ public class Consumer implements Client {
 			.append ('.')
 			.append (instrument.getName());
 		if (!this.is_muted) {
-			if (this.config.getProtocol().equalsIgnoreCase (RSSL_PROTOCOL))
+			if (this.config.getProtocol().equalsIgnoreCase (RSSL_PROTOCOL)) {
 				this.sendItemRequest (item_stream);
-			else if (this.config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL))
+			}
+			else if (this.config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL)) {
+				item_stream.setViewByFid (this.createViewByFid (item_stream.getViewByName()));
 				this.addSubscription (item_stream);
+			}
 		}
 		this.directory.put (this.sb.toString(), item_stream);
 		LOG.trace ("Directory size: {}", this.directory.size());
+	}
+
+/* Create a basic immutable map of MarketFeed FID names to FID values */
+	private ImmutableMap<String, Integer> createDictionaryMap() {
+		final Map<String, Integer> map = Maps.newLinkedHashMap();
+		if (TibMsg.GetMfeedDictNumFids() > 0) {
+			final TibMfeedDict mfeed_dictionary[] = TibMsg.GetMfeedDictionary();
+			for (int i = 0; i < mfeed_dictionary.length; i++) {
+				if (null == mfeed_dictionary[i]) continue;
+				final int fid = (i > TibMsg.GetMfeedDictPosFids()) ? (TibMsg.GetMfeedDictPosFids() - i) : i;
+				map.put (mfeed_dictionary[i].fname, new Integer (fid));
+			}
+		}
+		return ImmutableMap.copyOf (map);
+	}
+
+/* Convert a view by FID name to a view by FID values */
+	private ImmutableSortedSet<Integer> createViewByFid (ImmutableSortedSet<String> view_by_name) {
+		final ArrayList<Integer> fid_list = new ArrayList<Integer> (view_by_name.size());
+		for (String name : view_by_name) {
+			fid_list.add (this.appendix_a.get (name));
+		}
+		final Integer[] fid_array = fid_list.toArray (new Integer [fid_list.size()]);
+		return ImmutableSortedSet.copyOf (fid_array);
 	}
 
 	public void resubscribe() {
@@ -366,9 +411,14 @@ public class Consumer implements Client {
 				return;
 			}
 
+/* foreach directory item stream */
 			for (ItemStream item_stream : this.directory.values()) {
-				if (!item_stream.hasItemHandle())
+				if (!item_stream.hasViewByFid()) {
+					item_stream.setViewByFid (this.createViewByFid (item_stream.getViewByName()));
+				}
+				if (!item_stream.hasItemHandle()) {
 					this.addSubscription (item_stream);
+				}
 			}
 		}
 	}
@@ -517,6 +567,13 @@ public class Consumer implements Client {
 			new FlaggedHandle (this.omm_consumer.registerClient (this.event_queue, ommItemIntSpec, this, dictionary_name /* closure */)));
 	}
 
+	private void addDictionarySubscription (DataDictInfo dictionary_info) {
+		LOG.trace ("Sending dictionary request for \"{}\".", dictionary_info.getDictType().toString());
+		this.market_data_dictionary_subscriber.setDataDictInfo (dictionary_info);
+		this.dictionary_handle.put (dictionary_info.getDictType().toString(),
+			new FlaggedHandle (this.market_data_subscriber.subscribe (this.event_queue, this.market_data_dictionary_subscriber, this, dictionary_info.getDictType().toString() /* closure */)));
+	}
+
 	@Override
 	public void processEvent (Event event) {
 		LOG.trace (event);
@@ -536,6 +593,10 @@ public class Consumer implements Client {
 
 		case Event.MARKET_DATA_SVC_EVENT:
 			this.OnMarketDataSvcEvent ((MarketDataSvcEvent)event);
+			break;
+
+		case Event.MARKET_DATA_DICT_EVENT:
+			this.OnMarketDataDictEvent ((MarketDataDictEvent)event);
 			break;
 
 		case Event.CONNECTION_EVENT:
@@ -969,9 +1030,7 @@ public class Consumer implements Client {
 
 		final byte[] data = event.getData();
 		final int length = (data != null ? data.length : 0);
-
-		if (0 == length)
-			return;
+		if (0 == length) return;
 
 		try {
 			this.msg.UnPack (data);
@@ -997,10 +1056,32 @@ public class Consumer implements Client {
 				.append (",\"service\":\"").append (item_stream.getServiceName()).append ('\"')
 				.append (",\"recordname\":\"").append (item_stream.getItemName()).append ('\"')
 				.append (",\"fields\":{");
-			final String[] view = item_stream.getView();
-			for (int i = 0; i < view.length; ++i) {
-				if (i > 0) this.sb.append (',');
-				this.sb.append ('\"').append (view[i]).append ("\":").append (this.msg.Get (view[i]).StringData());
+			if (item_stream.hasViewByFid()) {
+				final ImmutableSortedSet<Integer> view = item_stream.getViewByFid();
+				this.field_set.clear();
+				for (int status = this.field.First (msg);
+					TibMsg.TIBMSG_OK == status;
+					status = this.field.Next())
+				{
+					if (view.contains (field.MfeedFid())) {
+						if (!this.field_set.isEmpty()) this.sb.append (',');
+						this.sb.append ('\"').append (this.field.Name()).append ("\":");
+						switch (this.field.Type()) {
+/* values that can be represented raw in JSON form */
+						case TibMsg.TIBMSG_BOOLEAN:
+						case TibMsg.TIBMSG_INT:
+						case TibMsg.TIBMSG_REAL:
+						case TibMsg.TIBMSG_UINT:
+							this.sb.append (this.field.StringData());
+							break;
+						default:
+							this.sb.append ('\"').append (this.field.StringData()).append ('\"');
+							break;
+						}
+						this.field_set.add (this.field.MfeedFid());
+						if (view.size() == this.field_set.size()) break;
+					}
+				}
 			}
 			this.sb.append ("}}");
 			LOG.info (ICAP_MARKER, this.sb.toString());
@@ -1016,8 +1097,51 @@ public class Consumer implements Client {
 			&& */ MarketDataSvcStatus.UP == event.getStatus().getState()
 			&& this.is_muted)
 		{
-			this.is_muted = false;
-			this.resubscribe();
+/* start dictionary subscription */
+			final DataDictInfo[] dataDictInfo = event.getDataDictInfo();
+			for (int i = 0; i < dataDictInfo.length; ++i) {
+				if (!this.dictionary_handle.containsKey (dataDictInfo[i].getDictType().toString())) 
+					this.addDictionarySubscription (dataDictInfo[i]);
+			}
+		}
+	}
+
+	private void OnMarketDataDictEvent (MarketDataDictEvent event) {
+		LOG.trace ("OnMarketDataDictEvent: {}", event);
+		if (MarketDataDictStatus.OK == event.getStatus().getState()) {
+			final byte[] data = event.getData();
+			final int length = (data != null ? data.length : 0);
+			if (0 == length) return;
+
+			try {
+/* Use new message object so not to waste space */
+				TibMsg msg = new TibMsg();
+				msg.UnPack (data);
+				if (DataDictInfo.MARKETFEED == event.getDataDictInfo().getDictType()) {
+					TibMsg.UnPackMfeedDictionary (msg);
+					LOG.trace ("MarketFeed dictionary unpacked.");
+				}
+			} catch (TibException e) {
+				LOG.trace ("Unable to unpack dictionary with TibMsg: {}", e.getMessage());
+				return;
+			}
+			
+			this.dictionary_handle.get ((String)event.getClosure()).setFlag();
+/* Check all pending dictionaries */
+			int pending_dictionaries = this.dictionary_handle.size();
+			for (FlaggedHandle flagged_handle : this.dictionary_handle.values()) {
+				if (flagged_handle.isFlagged())
+					--pending_dictionaries;
+			}
+			if (0 == pending_dictionaries) {
+				LOG.trace ("All used dictionaries loaded, resuming subscriptions.");
+				this.appendix_a = this.createDictionaryMap();
+				this.is_muted = false;
+				this.resubscribe();
+				this.pending_dictionary = false;
+			} else {
+				LOG.trace ("Dictionaries pending: {}", pending_dictionaries);
+			}
 		}
 	}
 

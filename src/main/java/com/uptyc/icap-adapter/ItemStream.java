@@ -3,6 +3,7 @@
 
 package com.uptyc.IcapAdapter;
 
+import com.google.common.collect.ImmutableSortedSet;
 import com.reuters.rfa.common.Handle;
 
 public class ItemStream {
@@ -13,7 +14,8 @@ public class ItemStream {
 	private String service_name;
 
 /* Pseudo-view parameter, an array of field names */
-	private String[] view;
+	private ImmutableSortedSet<String> view_by_name;
+	private ImmutableSortedSet<Integer> view_by_fid;
 
 /* Subscription handle which is valid from login success to login close. */
 	private Handle item_handle;
@@ -40,12 +42,28 @@ public class ItemStream {
 		this.service_name = service_name;
 	}
 
-	public String[] getView() {
-		return this.view;
+	public ImmutableSortedSet<String> getViewByName() {
+		return this.view_by_name;
 	}
 
-	public void setView (String[] view) {
-		this.view = view;
+	public void setViewByName (ImmutableSortedSet<String> view) {
+		this.view_by_name = view;
+	}
+
+	public boolean hasViewByName() {
+		return null != this.getViewByName();
+	}
+
+	public ImmutableSortedSet<Integer> getViewByFid() {
+		return this.view_by_fid;
+	}
+
+	public void setViewByFid (ImmutableSortedSet<Integer> view) {
+		this.view_by_fid = view;
+	}
+
+	public boolean hasViewByFid() {
+		return null != this.getViewByFid();
 	}
 
 	public Handle getItemHandle() {
