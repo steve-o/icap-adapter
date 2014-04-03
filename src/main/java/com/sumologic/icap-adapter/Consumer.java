@@ -1056,9 +1056,10 @@ public class Consumer implements Client {
 				.append (",\"service\":\"").append (item_stream.getServiceName()).append ('\"')
 				.append (",\"recordname\":\"").append (item_stream.getItemName()).append ('\"')
 				.append (",\"fields\":{");
+/* Use field_set to also count matching FIDs in update to view */
+			this.field_set.clear();
 			if (item_stream.hasViewByFid()) {
 				final ImmutableSortedSet<Integer> view = item_stream.getViewByFid();
-				this.field_set.clear();
 				for (int status = this.field.First (msg);
 					TibMsg.TIBMSG_OK == status;
 					status = this.field.Next())
@@ -1084,7 +1085,10 @@ public class Consumer implements Client {
 				}
 			}
 			this.sb.append ("}}");
-			LOG.info (ICAP_MARKER, this.sb.toString());
+/* Ignore updates with no matching fields */
+			if (!this.field_set.isEmpty()) {
+				LOG.info (ICAP_MARKER, this.sb.toString());
+			}
 		} catch (TibException e) {
 			LOG.trace ("Unable to unpack data with TibMsg: {}", e.getMessage());
 		}
