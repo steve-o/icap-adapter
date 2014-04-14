@@ -84,7 +84,7 @@ import com.thomsonreuters.rfa.valueadd.domainrep.rdm.login.RDMLoginRequest;
 import com.thomsonreuters.rfa.valueadd.domainrep.rdm.login.RDMLoginRequestAttrib;
 import com.thomsonreuters.rfa.valueadd.domainrep.rdm.login.RDMLoginResponse;
 
-public class Consumer implements Client {
+public class Consumer implements Client, ChainListener {
 	private static Logger LOG = LogManager.getLogger (Consumer.class.getName());
 	private static final Marker ICAP_MARKER = MarkerManager.getMarker ("ICAP");
 
@@ -440,11 +440,16 @@ public class Consumer implements Client {
 	}
 
 	private void addSubscription (ItemStream item_stream) {
-		LOG.trace ("Adding market data subscription.");
 		MarketDataItemSub marketDataItemSub = new MarketDataItemSub();
 		marketDataItemSub.setServiceName (item_stream.getServiceName());
 		marketDataItemSub.setItemName (item_stream.getItemName());
-		this.market_data_subscriber.subscribe (this.event_queue, marketDataItemSub, this, item_stream);
+		if (!Chains.isChain (item_stream.getItemName())) {
+			LOG.trace ("Adding market data subscription.");
+			item_stream.setItemHandle (this.market_data_subscriber.subscribe (this.event_queue, marketDataItemSub, this, item_stream));
+		} else {
+			LOG.trace ("Adding market data chain subscription.");
+			item_stream.setItemHandle (Chains.subscribe (this.market_data_subscriber, this.event_queue, marketDataItemSub, this, item_stream));
+		}
 	}
 
 /* Making a Login Request
@@ -1155,6 +1160,25 @@ public class Consumer implements Client {
 
 	private void OnEntitlementsAuthenticationEvent (EntitlementsAuthenticationEvent event) {
 		LOG.trace ("OnEntitlementsAuthenticationEvent: {}", event);
+	}
+
+	@Override
+	public void OnAddEntry (String item_name, java.lang.Object closure) {
+		if (this.directory.containsKey (item_name)) {
+			LOG.trace ("Ignoring chain containing duplicate item name \"{}\".", item_name);
+			return;
+		} else {
+			final ItemStream chain = (ItemStream)closure;
+			final String[] view_by_name = chain.getViewByName().toArray (new String[0]);
+			Instrument instrument = new Instrument (chain.getServiceName(), item_name, view_by_name);
+			ItemStream stream = new ItemStream();
+			this.createItemStream (instrument, stream);
+		}
+	}
+
+/* Ignore delete events */
+	@Override
+	public void OnRemoveEntry (String item_name, java.lang.Object closure) {
 	}
 }
 
