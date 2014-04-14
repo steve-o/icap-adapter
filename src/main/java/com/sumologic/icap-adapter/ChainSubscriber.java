@@ -36,6 +36,42 @@ public class ChainSubscriber implements Handle, Client {
 	private TibMsg msg;
 	private TibField field;
 
+	private static final int MAX_ITEMS_IN_LINK = 14;
+
+	private static final int PREV_LR_FID		= 237;	/* Previous link in chain */
+	private static final int NEXT_LR_FID		= 238;	/* Next link in chain */
+	private static final int REF_COUNT_FID		= 239;	/* Count of valid items in this link */
+	private static final int LINK_1_FID		= 240;
+	private static final int LINK_2_FID		= 241;
+	private static final int LINK_3_FID		= 242;
+	private static final int LINK_4_FID		= 243;
+	private static final int LINK_5_FID		= 244;
+	private static final int LINK_6_FID		= 245;
+	private static final int LINK_7_FID		= 246;
+	private static final int LINK_8_FID		= 247;
+	private static final int LINK_9_FID		= 248;
+	private static final int LINK_10_FID		= 249;
+	private static final int LINK_11_FID		= 250;
+	private static final int LINK_12_FID		= 251;
+	private static final int LINK_13_FID		= 252;
+	private static final int LINK_14_FID		= 253;
+	private static final int LONGLINK_1_FID		= 800;
+	private static final int LONGLINK_2_FID		= 801;
+	private static final int LONGLINK_3_FID		= 802;
+	private static final int LONGLINK_4_FID		= 803;
+	private static final int LONGLINK_5_FID		= 804;
+	private static final int LONGLINK_6_FID		= 805;
+	private static final int LONGLINK_7_FID		= 806;
+	private static final int LONGLINK_8_FID		= 807;
+	private static final int LONGLINK_9_FID		= 808;
+	private static final int LONGLINK_10_FID	= 809;
+	private static final int LONGLINK_11_FID	= 810;
+	private static final int LONGLINK_12_FID	= 811;
+	private static final int LONGLINK_13_FID	= 812;
+	private static final int LONGLINK_14_FID	= 813;
+	private static final int LONGPREVLR_FID		= 814;
+	private static final int LONGNEXTLR_FID		= 815;
+
 	ChainSubscriber (MarketDataSubscriber aSubscriber, EventQueue aQueue, MarketDataItemSub aSubscription, ChainListener listener, java.lang.Object aClosure) {
 		this.market_data_subscriber = aSubscriber;
 		this.event_queue = aQueue;
@@ -79,6 +115,18 @@ public class ChainSubscriber implements Handle, Client {
 
 	private void OnMarketDataItemEvent (MarketDataItemEvent event) {
 		LOG.trace ("OnMarketDataItemEvent: {}", event);
+/* Remove this link pending future resubmission to the chain. */
+		if (event.isEventStreamClosed()) {
+			LOG.trace ("Removing closed link subscription for \"{}\".", event.getItemName());
+			this.link_handles.remove (event.getItemName());
+/* 5.1.5.6 Close Event Stream
+ * It is important to note that if the Event Stream had been closed by RFA,
+ * the application must not call unsubscribe().
+ * The Event Stream is already closed and the Handle is no longer valid.
+ */
+		}
+/* Note message types CORRECT, CLOSING_RUN are ignored.
+ */
 		if (MarketDataItemEvent.UPDATE != event.getMarketDataMsgType() &&
 			MarketDataItemEvent.IMAGE != event.getMarketDataMsgType() &&
 			MarketDataItemEvent.UNSOLICITED_IMAGE != event.getMarketDataMsgType())
@@ -108,24 +156,24 @@ public class ChainSubscriber implements Handle, Client {
 /* Detect if chain link and evalute required FIDs as discovered */
 			Optional<Integer> ref_count = Optional.absent();
 			Optional<String> prev_lr = Optional.absent(), next_lr = Optional.absent();
-			Optional<String>[] links = new Optional[14];
+			Optional<String>[] links = new Optional[MAX_ITEMS_IN_LINK];
 			Arrays.fill (links, Optional.absent());
 			for (int status = this.field.First (msg);
 				TibMsg.TIBMSG_OK == status;
 				status = this.field.Next())
 			{
 				final int fid = this.field.MfeedFid();
-				if (239 == fid) {
+				if (REF_COUNT_FID == fid) {
 					ref_count = Optional.of (new Integer (this.field.IntData()));
-				} else if (237 == fid || 814 == fid) {
+				} else if (PREV_LR_FID == fid || LONGPREVLR_FID == fid) {
 					prev_lr = Optional.of (this.field.StringData());
-				} else if (238 == fid || 815 == fid) {
+				} else if (NEXT_LR_FID == fid || LONGNEXTLR_FID == fid) {
 					next_lr = Optional.of (this.field.StringData());
-				} else if (fid >= 240 && fid <= 253) {
-					final int i = fid - 240;
+				} else if (fid >= LINK_1_FID && fid <= LINK_14_FID) {
+					final int i = fid - LINK_1_FID;
 					links[i] = Optional.of (this.field.StringData());
-				} else if (fid >= 800 && fid <= 813) {
-					final int i = fid - 800;
+				} else if (fid >= LONGLINK_1_FID && fid <= LONGLINK_14_FID) {
+					final int i = fid - LONGLINK_1_FID;
 					links[i] = Optional.of (this.field.StringData());
 				}
 			}
