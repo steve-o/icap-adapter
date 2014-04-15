@@ -3,14 +3,15 @@
 
 package com.sumologic.IcapAdapter;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.google.common.base.Optional;
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.Multiset;
 import com.reuters.rfa.common.Client;
 import com.reuters.rfa.common.Event;
 import com.reuters.rfa.common.EventQueue;
@@ -31,7 +32,9 @@ public class ChainSubscriber implements Handle, Client {
 	private final ChainListener listener;
 	private final java.lang.Object closure;
 	private final Map<String, Handle> link_handles;
-	private final Set<String> items;
+	private final Map<String, Map<Integer, String>> link_items;
+	private final Map<String, String> next_lrs;
+	private final Multiset<String> all_items;
 
 	private TibMsg msg;
 	private TibField field;
@@ -41,7 +44,7 @@ public class ChainSubscriber implements Handle, Client {
 	private static final int PREV_LR_FID		= 237;	/* Previous link in chain */
 	private static final int NEXT_LR_FID		= 238;	/* Next link in chain */
 	private static final int REF_COUNT_FID		= 239;	/* Count of valid items in this link */
-	private static final int LINK_1_FID		= 240;
+	private static final int LINK_1_FID		= 240;	/* Links must be contiguous */
 	private static final int LINK_2_FID		= 241;
 	private static final int LINK_3_FID		= 242;
 	private static final int LINK_4_FID		= 243;
@@ -79,10 +82,16 @@ public class ChainSubscriber implements Handle, Client {
 		this.listener = listener;
 		this.closure = aClosure;
 
+/* each link in chain */
+		this.link_items = new HashMap<String, Map<Integer, String>>();
 		this.link_handles = new HashMap<String, Handle>();
-		this.link_handles.put (aSubscription.getItemName(), this.subscribeLink (aSubscription.getItemName()));
+/* next record link */
+		this.next_lrs = new HashMap<String, String>();
+/* superset of item names */
+		this.all_items = HashMultiset.create();
 
-		this.items = new HashSet<String>();
+		this.link_items.put (aSubscription.getItemName(), new HashMap<Integer, String> (MAX_ITEMS_IN_LINK));
+		this.link_handles.put (aSubscription.getItemName(), this.subscribeLink (aSubscription.getItemName()));
 
 		this.msg = new TibMsg();
 		this.field = new TibField();
@@ -97,6 +106,30 @@ public class ChainSubscriber implements Handle, Client {
 		LOG.trace ("Subscribing to link {}", link_name);
 		this.marketDataItemSub.setItemName (link_name);
 		return this.market_data_subscriber.subscribe (this.event_queue, this.marketDataItemSub, this, null);
+	}
+
+	private void unsubscribeLink (String link_name, Handle handle) {
+		LOG.trace ("Unsubscribing to link {}", link_name);
+		this.market_data_subscriber.unsubscribe (handle);
+	}
+
+	private void OnAddEntry (String item_name) {
+		if (!this.all_items.contains (item_name)) {
+			this.listener.OnAddEntry (item_name, this.closure);
+		}
+		this.all_items.add (item_name);
+	}
+
+	private void OnUpdateEntry (String old_name, String new_name) {
+		this.OnRemoveEntry (old_name);
+		this.OnAddEntry (new_name);
+	}
+
+	private void OnRemoveEntry (String item_name) {
+		this.all_items.remove (item_name);
+		if (!this.all_items.contains (item_name)) {
+			this.listener.OnRemoveEntry (item_name, this.closure);
+		}
 	}
 
 	@Override
@@ -185,25 +218,58 @@ public class ChainSubscriber implements Handle, Client {
 				return;
 			}
 /* Record new items */
+			final Map<Integer, String> link_items = this.link_items.get (event.getItemName());
 			for (int i = link_count; i > 0; --i) {
 				if (!links[i - 1].isPresent()) {
 					continue;
 				}
+/* link item */
 				final String item_name = links[i - 1].get();
-				if (this.items.contains (item_name)) {
-					continue;
+				final Integer item_idx = new Integer (i);
+				if (!link_items.containsKey (item_idx)) {
+					this.OnAddEntry (item_name);
+					link_items.put (item_idx, item_name);	/* add-entry */
 				} else {
-					this.items.add (item_name);
-					this.listener.OnAddEntry (item_name, this.closure);
+					final String old_name = link_items.get (item_idx);
+					if (item_name.equals (old_name)) {
+						/* refresh-entry */
+					} else {
+						this.OnUpdateEntry (old_name, item_name);
+						link_items.put (item_idx, item_name);	/* update-entry */
+					}
 				}
 			}
 
+/* Next link in chain */
+			if (next_lr.isPresent()) {
+				if (next_lr.get().isEmpty()) {
+/* link(s) are removed */
+					String link_name = event.getItemName();
+					while (this.next_lrs.containsKey (link_name)) {
+						final String removed_link = this.next_lrs.get (link_name);
+						final Map<Integer, String> removed_items = this.link_items.get (removed_link);
+						for (String removed_entry : removed_items.values()) {
+							this.OnRemoveEntry (removed_entry);
+						}
+						this.unsubscribeLink (removed_link, this.link_handles.get (removed_link));
+						this.link_items.remove (removed_link);
+						this.link_handles.remove (removed_link);
+						link_name = removed_link;
+					}
+				} else if (Chains.isChainLink (next_lr.get())) {
+					if (!this.link_handles.containsKey (next_lr.get())) {
 /* Subscribe to next link */
-			if (next_lr.isPresent() &&
-				Chains.isChainLink (next_lr.get()) &&
-				!this.link_handles.containsKey (next_lr.get()))
-			{
-				this.link_handles.put (next_lr.get(), this.subscribeLink (next_lr.get()));
+						this.link_items.put (next_lr.get(), new HashMap<Integer, String> (MAX_ITEMS_IN_LINK));
+						this.link_handles.put (next_lr.get(), this.subscribeLink (next_lr.get()));
+						this.next_lrs.put (event.getItemName(), next_lr.get());
+					} else {
+/* already in subscription */
+					}
+				} else {
+/* Invalid link */
+				}
+			} else {
+/* partial record */
 			}
 
 		} catch (TibException e) {
