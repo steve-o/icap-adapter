@@ -367,6 +367,23 @@ public class Consumer implements Client, ChainListener {
 		LOG.trace ("Directory size: {}", this.directory.size());
 	}
 
+	public void destroyItemStream (ItemStream item_stream) {
+		LOG.trace ("Destroying item stream for RIC \"{}\" on service \"{}\".", item_stream.getItemName(), item_stream.getServiceName());
+/* Construct directory unique key */
+		this.sb.setLength (0);
+		this.sb	.append (item_stream.getServiceName())
+			.append ('.')
+			.append (item_stream.getItemName());
+		if (this.config.getProtocol().equalsIgnoreCase (RSSL_PROTOCOL)) {
+			this.cancelItemRequest (item_stream);
+		}
+		else if (this.config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL)) {
+			this.removeSubscription (item_stream);
+		}
+		this.directory.remove (this.sb.toString());
+		LOG.trace ("Directory size: {}", this.directory.size());
+	}
+
 /* Create a basic immutable map of MarketFeed FID names to FID values */
 	private ImmutableMap<String, Integer> createDictionaryMap() {
 		final Map<String, Integer> map = Maps.newLinkedHashMap();
@@ -439,6 +456,19 @@ public class Consumer implements Client, ChainListener {
 		this.omm_pool.releaseMsg (msg);
 	}
 
+/* 8.2.11.1 Unregistering Interest In OMM Market Information
+ * if the event Stream had already been closed by RFA ... the application does not need to not call
+ * unregisterClient().
+ */
+	private void cancelItemRequest (ItemStream item_stream) {
+		if (item_stream.hasItemHandle()) {
+			LOG.trace ("Cancelling market price request.");
+			this.omm_consumer.unregisterClient (item_stream.getItemHandle());
+		} else {
+			LOG.trace ("Market price request closed by RFA.");
+		}
+	}
+
 	private void addSubscription (ItemStream item_stream) {
 		MarketDataItemSub marketDataItemSub = new MarketDataItemSub();
 		marketDataItemSub.setServiceName (item_stream.getServiceName());
@@ -448,7 +478,20 @@ public class Consumer implements Client, ChainListener {
 			item_stream.setItemHandle (this.market_data_subscriber.subscribe (this.event_queue, marketDataItemSub, this, item_stream));
 		} else {
 			LOG.trace ("Adding market data chain subscription.");
-			item_stream.setItemHandle (Chains.subscribe (this.market_data_subscriber, this.event_queue, marketDataItemSub, this, item_stream));
+			item_stream.setItemHandle (Chains.subscribe (this.market_data_subscriber, this.msg, this.field, this.event_queue, marketDataItemSub, this, item_stream));
+		}
+	}
+
+	private void removeSubscription (ItemStream item_stream) {
+		if (!Chains.isChain (item_stream.getItemName())) {
+			if (item_stream.hasItemHandle()) {
+				LOG.trace ("Removing market data subscription.");
+				this.market_data_subscriber.unsubscribe (item_stream.getItemHandle());
+			} else {
+				LOG.trace ("Market data subscription closed by RFA.");
+			}
+		} else {
+/* TBD */
 		}
 	}
 
@@ -911,11 +954,20 @@ public class Consumer implements Client, ChainListener {
 
 	private void OnMarketDataItemEvent (MarketDataItemEvent event) {
 		final DateTime dt = new DateTime();
+		final ItemStream item_stream = (ItemStream)event.getClosure();
 		LOG.trace ("OnMarketDataItemEvent: {}", event);
+		if (event.isEventStreamClosed()) {
+			LOG.trace ("Subscription handle for \"{}\" is closed.", event.getItemName());
+			item_stream.clearItemHandle();
+		}
 /* strings in switch are not supported in -source 1.6 */
 /* ignore initial images and refreshes */
-		if (/* MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()
-			|| */ MarketDataItemEvent.UPDATE == event.getMarketDataMsgType()) {
+		if (MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()) {
+			LOG.trace ("Ignoring solicited image.");
+			return;
+		}
+		else if (MarketDataItemEvent.UPDATE == event.getMarketDataMsgType()) {
+/* fall through */
 		}
 		else if (MarketDataItemEvent.UNSOLICITED_IMAGE == event.getMarketDataMsgType()) {
 			LOG.trace ("Ignoring unsolicited image.");
@@ -934,7 +986,6 @@ public class Consumer implements Client, ChainListener {
 				return;
 
 /* ICAP error output here */
-			final ItemStream item_stream = (ItemStream)event.getClosure();
 /* Rewrite to RSSL/OMM semantics, (Stream,Data,Code)
  *
  * Examples: OPEN,OK,NONE
@@ -1053,7 +1104,6 @@ public class Consumer implements Client, ChainListener {
 			}
 
 /* ICAP output here, do not use GSON as fields map would be expensive to create. */
-			final ItemStream item_stream = (ItemStream)event.getClosure();
 			this.sb.setLength (0);
 			this.sb .append ('{')
 				 .append ("\"timestamp\":\"").append (dt.toString()).append ('\"')
@@ -1164,7 +1214,10 @@ public class Consumer implements Client, ChainListener {
 
 	@Override
 	public void OnAddEntry (String item_name, java.lang.Object closure) {
-		if (this.directory.containsKey (item_name)) {
+		LOG.trace ("OnAddEntry ({})", item_name);
+		if (item_name.isEmpty()) {
+			LOG.trace ("Ignoring empty item name in chain.");
+		} else if (this.directory.containsKey (item_name)) {
 			LOG.trace ("Ignoring chain containing duplicate item name \"{}\".", item_name);
 			return;
 		} else {
@@ -1179,6 +1232,19 @@ public class Consumer implements Client, ChainListener {
 /* Ignore delete events */
 	@Override
 	public void OnRemoveEntry (String item_name, java.lang.Object closure) {
+		LOG.trace ("OnRemoveEntry ({})", item_name);
+		if (item_name.isEmpty()) {
+/* nop */
+		} else {
+			final ItemStream chain = (ItemStream)closure;
+/* Construct directory unique key */
+			this.sb.setLength (0);
+			this.sb	.append (chain.getServiceName())
+				.append ('.')
+				.append (item_name);
+			ItemStream stream = this.directory.get (this.sb.toString());
+			this.destroyItemStream (stream);
+		}
 	}
 }
 

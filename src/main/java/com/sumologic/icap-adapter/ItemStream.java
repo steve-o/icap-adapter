@@ -77,6 +77,10 @@ public class ItemStream {
 	public void setItemHandle (Handle item_handle) {
 		this.item_handle = item_handle;
 	}
+
+	public void clearItemHandle() {
+		this.setItemHandle (null);
+	}
 }
 
 /* eof */
