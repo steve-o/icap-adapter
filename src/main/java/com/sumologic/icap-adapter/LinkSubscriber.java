@@ -35,40 +35,6 @@ public class LinkSubscriber implements Client {
 
 	private static final int MAX_ITEMS_IN_LINK = 14;
 
-	private static final int PREV_LR_FID		= 237;	/* Previous link in chain */
-	private static final int NEXT_LR_FID		= 238;	/* Next link in chain */
-	private static final int REF_COUNT_FID		= 239;	/* Count of valid items in this link */
-	private static final int LINK_1_FID		= 240;	/* Links must be contiguous */
-	private static final int LINK_2_FID		= 241;
-	private static final int LINK_3_FID		= 242;
-	private static final int LINK_4_FID		= 243;
-	private static final int LINK_5_FID		= 244;
-	private static final int LINK_6_FID		= 245;
-	private static final int LINK_7_FID		= 246;
-	private static final int LINK_8_FID		= 247;
-	private static final int LINK_9_FID		= 248;
-	private static final int LINK_10_FID		= 249;
-	private static final int LINK_11_FID		= 250;
-	private static final int LINK_12_FID		= 251;
-	private static final int LINK_13_FID		= 252;
-	private static final int LINK_14_FID		= 253;
-	private static final int LONGLINK_1_FID		= 800;
-	private static final int LONGLINK_2_FID		= 801;
-	private static final int LONGLINK_3_FID		= 802;
-	private static final int LONGLINK_4_FID		= 803;
-	private static final int LONGLINK_5_FID		= 804;
-	private static final int LONGLINK_6_FID		= 805;
-	private static final int LONGLINK_7_FID		= 806;
-	private static final int LONGLINK_8_FID		= 807;
-	private static final int LONGLINK_9_FID		= 808;
-	private static final int LONGLINK_10_FID	= 809;
-	private static final int LONGLINK_11_FID	= 810;
-	private static final int LONGLINK_12_FID	= 811;
-	private static final int LONGLINK_13_FID	= 812;
-	private static final int LONGLINK_14_FID	= 813;
-	private static final int LONGPREVLR_FID		= 814;
-	private static final int LONGNEXTLR_FID		= 815;
-
 	LinkSubscriber (ChainSubscriber chain, TibMsg msg, TibField field, String name) {
 		this.chain = chain;
 		this.msg = msg;
@@ -85,7 +51,7 @@ public class LinkSubscriber implements Client {
 		this.next_link_subscriber = Optional.absent();
 
 /* market data subscription */
-		this.handle = Optional.of (this.chain.subscribeLink (name, this));
+		this.handle = Optional.of (this.chain.SubscribeLink (name, this));
 	}
 
 	public void Clear() {
@@ -100,7 +66,7 @@ public class LinkSubscriber implements Client {
 			this.next_link_subscriber = Optional.absent();
 		}
 		if (this.handle.isPresent()) {
-			this.chain.unsubscribeLink (this.handle.get());
+			this.chain.UnsubscribeLink (this.handle.get());
 			this.handle = Optional.absent();
 		}
 	}
@@ -164,14 +130,14 @@ public class LinkSubscriber implements Client {
 				status = this.field.Next())
 			{
 				final int fid = this.field.MfeedFid();
-				if (REF_COUNT_FID == fid) {
+				if (Chains.REF_COUNT_FID == fid) {
 					this.OnRefCount (this.field.IntData());
-				} else if (NEXT_LR_FID == fid || LONGNEXTLR_FID == fid) {
+				} else if (Chains.NEXT_LR_FID == fid || Chains.LONGNEXTLR_FID == fid) {
 					this.OnNextLink (this.field.StringData());
-				} else if (fid >= LINK_1_FID && fid <= LINK_14_FID) {
-					this.OnDataRecordReference (fid - LINK_1_FID, this.field.StringData());
-				} else if (fid >= LONGLINK_1_FID && fid <= LONGLINK_14_FID) {
-					this.OnDataRecordReference (fid - LONGLINK_1_FID, this.field.StringData());
+				} else if (fid >= Chains.LINK_1_FID && fid <= Chains.LINK_14_FID) {
+					this.OnDataRecordReference (fid - Chains.LINK_1_FID, this.field.StringData());
+				} else if (fid >= Chains.LONGLINK1_FID && fid <= Chains.LONGLINK14_FID) {
+					this.OnDataRecordReference (fid - Chains.LONGLINK1_FID, this.field.StringData());
 				}
 			}
 		} catch (TibException e) {

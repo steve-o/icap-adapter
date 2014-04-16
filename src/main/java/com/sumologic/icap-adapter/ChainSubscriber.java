@@ -39,18 +39,22 @@ public class ChainSubscriber implements Handle {
 		this.all_items = HashMultiset.create();
 	}
 
+	public void Clear() {
+		this.link_subscriber.Clear();
+	}
+
 	@Override
 	public boolean isActive() {
 		return true;
 	}
 
-	public Handle subscribeLink (String link_name, Client client) {
+	public Handle SubscribeLink (String link_name, Client client) {
 		LOG.trace ("Subscribing to chain link {}", link_name);
 		this.marketDataItemSub.setItemName (link_name);
 		return this.market_data_subscriber.subscribe (this.event_queue, this.marketDataItemSub, client, null);
 	}
 
-	public void unsubscribeLink (Handle handle) {
+	public void UnsubscribeLink (Handle handle) {
 		this.market_data_subscriber.unsubscribe (handle);
 	}
 

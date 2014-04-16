@@ -491,7 +491,8 @@ public class Consumer implements Client, ChainListener {
 				LOG.trace ("Market data subscription closed by RFA.");
 			}
 		} else {
-/* TBD */
+			final ChainSubscriber chain = (ChainSubscriber)item_stream.getItemHandle();
+			chain.Clear();
 		}
 	}
 
@@ -1196,6 +1197,7 @@ public class Consumer implements Client, ChainListener {
 				LOG.trace ("All used dictionaries loaded, resuming subscriptions.");
 				this.appendix_a = this.createDictionaryMap();
 				this.is_muted = false;
+				Chains.ApplyFieldDictionary (this.appendix_a);
 				this.resubscribe();
 				this.pending_dictionary = false;
 			} else {
