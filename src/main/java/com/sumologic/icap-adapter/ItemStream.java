@@ -20,10 +20,14 @@ public class ItemStream {
 /* Subscription handle which is valid from login success to login close. */
 	private Handle item_handle;
 
+	private int reference_count;
+	private Handle timer_handle;
+
 /* Performance counters */
 
 	public ItemStream() {
 		this.setItemHandle (null);
+		this.reference_count = 1;
 	}
 
 	public String getItemName() {
@@ -81,6 +85,29 @@ public class ItemStream {
 	public void clearItemHandle() {
 		this.setItemHandle (null);
 	}
+
+	public int referenceExchangeAdd (int val) {
+		final int old = this.reference_count;
+		this.reference_count += val;
+		return old;
+	}
+
+	public Handle getTimerHandle() {
+		return this.timer_handle;
+	}
+
+	public boolean hasTimerHandle() {
+		return null != this.getTimerHandle();
+	}
+
+	public void setTimerHandle (Handle timer_handle) {
+		this.timer_handle = timer_handle;
+	}
+
+	public void clearTimerHandle() {
+		this.setTimerHandle (null);
+	}
+
 }
 
 /* eof */

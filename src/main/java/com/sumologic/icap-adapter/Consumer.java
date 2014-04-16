@@ -52,6 +52,7 @@ import com.reuters.rfa.session.event.MarketDataItemStatus;
 import com.reuters.rfa.session.event.MarketDataSvcEvent;
 import com.reuters.rfa.session.event.MarketDataSvcStatus;
 import com.reuters.rfa.session.Session;
+import com.reuters.rfa.session.TimerIntSpec;
 import com.reuters.rfa.session.MarketDataDictSub;
 import com.reuters.rfa.session.MarketDataEnums;
 import com.reuters.rfa.session.MarketDataItemSub;
@@ -162,6 +163,7 @@ public class Consumer implements Client, ChainListener {
 	private static final boolean UNSUBSCRIBE_ON_SHUTDOWN = false;
 
 	private static final int OMM_PAYLOAD_SIZE       = 5000;
+	private static final int GC_DELAY_MS		= 15000;
 
 	private static final String RSSL_PROTOCOL       = "rssl";
 	private static final String SSLED_PROTOCOL      = "ssled";
@@ -654,6 +656,10 @@ public class Consumer implements Client, ChainListener {
 
 		case Event.ENTITLEMENTS_AUTHENTICATION_EVENT:
 			this.OnEntitlementsAuthenticationEvent ((EntitlementsAuthenticationEvent)event);
+			break;
+
+		case Event.TIMER_EVENT:
+			this.OnTimerEvent (event);
 			break;
 
 		default:
@@ -1219,15 +1225,28 @@ public class Consumer implements Client, ChainListener {
 		LOG.trace ("OnAddEntry ({})", item_name);
 		if (item_name.isEmpty()) {
 			LOG.trace ("Ignoring empty item name in chain.");
-		} else if (this.directory.containsKey (item_name)) {
-			LOG.trace ("Ignoring chain containing duplicate item name \"{}\".", item_name);
-			return;
 		} else {
 			final ItemStream chain = (ItemStream)closure;
-			final String[] view_by_name = chain.getViewByName().toArray (new String[0]);
-			Instrument instrument = new Instrument (chain.getServiceName(), item_name, view_by_name);
-			ItemStream stream = new ItemStream();
-			this.createItemStream (instrument, stream);
+/* Construct directory unique key */
+			this.sb.setLength (0);
+			this.sb	.append (chain.getServiceName())
+				.append ('.')
+				.append (item_name);
+			final String key = this.sb.toString();
+			if (this.directory.containsKey (key)) {
+/* Track additional reference on active subscription */
+				final ItemStream stream = this.directory.get (key);
+				if (0 == stream.referenceExchangeAdd (1)) {
+					this.market_data_subscriber.unregisterClient (stream.getTimerHandle());
+					stream.clearTimerHandle();
+					LOG.trace ("Removed \"{}\" from pending removal queue.", item_name);
+				}
+			} else {
+				final String[] view_by_name = chain.getViewByName().toArray (new String[0]);
+				final Instrument instrument = new Instrument (chain.getServiceName(), item_name, view_by_name);
+				final ItemStream stream = new ItemStream();
+				this.createItemStream (instrument, stream);
+			}
 		}
 	}
 
@@ -1244,8 +1263,34 @@ public class Consumer implements Client, ChainListener {
 			this.sb	.append (chain.getServiceName())
 				.append ('.')
 				.append (item_name);
-			ItemStream stream = this.directory.get (this.sb.toString());
+			final String key = this.sb.toString();
+			final ItemStream stream = this.directory.get (key);
+			if (1 == stream.referenceExchangeAdd (-1)) {
+				final TimerIntSpec timer = new TimerIntSpec();
+				timer.setDelay (GC_DELAY_MS);
+				stream.setTimerHandle (this.market_data_subscriber.registerClient (this.event_queue, timer, this, stream));
+				LOG.trace ("Added \"{}\" to pending removal queue.", item_name);
+			}
+		}
+	}
+
+/* Expunge enqueued streams */
+	private void OnTimerEvent (Event event) {
+		LOG.trace ("OnTimerEvent: {}", event);
+		final ItemStream stream = (ItemStream)event.getClosure();
+/* timer should be closed by RFA when non-repeating. */
+		if (event.isEventStreamClosed()) {
+			LOG.trace ("Timer handle for \"{}\" is closed.", stream.getItemName());
+		} else {
+			this.market_data_subscriber.unregisterClient (stream.getTimerHandle());
+			LOG.trace ("Removed \"{}\" from pending removal queue.", stream.getItemName());
+		}
+		stream.clearTimerHandle();
+		if (0 == stream.referenceExchangeAdd (0)) {
 			this.destroyItemStream (stream);
+		} else {
+/* nop */
+			LOG.trace ("Stream reference non-zero on garbage collect for \"{}\".", stream.getItemName());
 		}
 	}
 }

@@ -29,9 +29,9 @@ public class LinkSubscriber implements Client {
 
 	private final Optional<String>[] items;
 	private int ref_count;
+	private Optional<Handle> handle;
 	private Optional<String> next_lr;
 	private Optional<LinkSubscriber> next_link_subscriber;
-	private Optional<Handle> handle;
 
 	private static final int MAX_ITEMS_IN_LINK = 14;
 
@@ -61,13 +61,17 @@ public class LinkSubscriber implements Client {
 			}
 		}
 		Arrays.fill (this.items, Optional.absent());
-		if (this.next_link_subscriber.isPresent()) {
-			this.next_link_subscriber.get().Clear();
-			this.next_link_subscriber = Optional.absent();
-		}
 		if (this.handle.isPresent()) {
 			this.chain.UnsubscribeLink (this.handle.get());
 			this.handle = Optional.absent();
+		}
+		if (this.next_lr.isPresent()) {
+			this.next_lr = Optional.absent();
+		}
+		if (this.next_link_subscriber.isPresent()) {
+			final LinkSubscriber next_link_subscriber = this.next_link_subscriber.get();
+			this.next_link_subscriber = Optional.absent();
+			next_link_subscriber.Clear();
 		}
 	}
 
