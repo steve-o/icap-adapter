@@ -57,20 +57,20 @@ public class Rfa {
 /* Session list */
 			name = "/Sessions/" + session_name + "/connectionList";
 			value = connection_name;
-			staging.addVariable (this.fixRfaStringPath (name), value);
+			staging.addVariable (fixRfaStringPath (name), value);
 /* Logging per connection */
 			name = "/Connections/" + connection_name + "/logFileName";
 			value = "none";
-			staging.addVariable (this.fixRfaStringPath (name), value);
+			staging.addVariable (fixRfaStringPath (name), value);
 /* List of servers */
 			name = "/Connections/" + connection_name + "/serverList";
 			value = Joiner.on (",").join (session_config.getServers());
-			staging.addVariable (this.fixRfaStringPath (name), value);
+			staging.addVariable (fixRfaStringPath (name), value);
 /* Default port */
 			if (session_config.hasDefaultPort()) {
 				name = "/Connections/" + connection_name + "/portNumber";
 				value = session_config.getDefaultPort();
-				staging.addVariable (this.fixRfaStringPath (name), value);
+				staging.addVariable (fixRfaStringPath (name), value);
 			}
 
 /* Communications protocol */
@@ -78,12 +78,12 @@ public class Rfa {
 			if (session_config.getProtocol().equalsIgnoreCase (RSSL_PROTOCOL))
 			{
 				value = "RSSL";
-				staging.addVariable (this.fixRfaStringPath (name), value);
+				staging.addVariable (fixRfaStringPath (name), value);
 			}
 			else if (session_config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL))
 			{
 				value = "SSL";
-				staging.addVariable (this.fixRfaStringPath (name), value);
+				staging.addVariable (fixRfaStringPath (name), value);
 
 				name = "/Connections/" + connection_name + "/userName";
 				StringBuilder username = new StringBuilder();
@@ -108,22 +108,22 @@ public class Rfa {
 					}
 				}
 				value = username.toString();
-				staging.addVariable (this.fixRfaStringPath (name), value);
+				staging.addVariable (fixRfaStringPath (name), value);
 
 /* 9.10.2. Merged Thread Model */
 				name = "/Sessions/" + session_name + "/shareConnections";
 				value = "False";
-				staging.addVariable (this.fixRfaStringPath (name), value);
+				staging.addVariable (fixRfaStringPath (name), value);
 /* Enable dictionary download */
 				name = "/Connections/" + connection_name + "/downloadDataDict";
 				value = "True";
-				staging.addVariable (this.fixRfaStringPath (name), value);
+				staging.addVariable (fixRfaStringPath (name), value);
 /* Disable client side DACS usage */
 				name = "/Connections/" + connection_name + "/dacs_CbeEnabled";
 				value = "False";
-				staging.addVariable (this.fixRfaStringPath (name), value);
+				staging.addVariable (fixRfaStringPath (name), value);
 				name = "/Connections/" + connection_name + "/dacs_SbeSubEnabled";
-				staging.addVariable (this.fixRfaStringPath (name), value);
+				staging.addVariable (fixRfaStringPath (name), value);
 			}
 			else
 			{

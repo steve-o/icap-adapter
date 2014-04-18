@@ -112,7 +112,7 @@ public class IcapAdapter {
 
 	private void init (CommandLine line, Options options) throws Exception {
 		if (line.hasOption (HELP_OPTION)) {
-			this.printHelp (options);
+			printHelp (options);
 			return;
 		}
 
@@ -126,7 +126,7 @@ public class IcapAdapter {
 				LOG.debug ("Session declaration: {}", session);
 				final URI parsed = new URI (session);
 /* For each key-value pair, i.e. ?a=x&b=y&c=z -> (a,x) (b,y) (c,z) */
-				final ImmutableMap<String, String> query = ImmutableMap.copyOf (this.parseQuery (parsed.getQuery()));
+				final ImmutableMap<String, String> query = ImmutableMap.copyOf (parseQuery (parsed.getQuery()));
 
 /* Extract out required parameters */
 				final String protocol = parsed.getScheme();
