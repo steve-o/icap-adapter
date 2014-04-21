@@ -42,7 +42,8 @@ public final class Chains {
 	}
 
 	static boolean isChainLink (String item_name) {
-		return item_name.matches ("^\\d+#.+$");
+		return item_name.matches ("^\\d+#.+$") ||
+			item_name.matches ("^\\d+\\.(AV|NG|NL|PG|PL)\\..+$");
 	}
 
 	static void ApplyFieldDictionary (ImmutableMap<String, Integer> appendix_a) {

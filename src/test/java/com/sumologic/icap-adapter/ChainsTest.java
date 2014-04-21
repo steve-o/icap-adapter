@@ -22,6 +22,7 @@ public class ChainsTest extends TestCase {
 		assertTrue ("1#.FTSE", Chains.isChainLink ("1#.FTSE"));
 		assertFalse (".FTSE", Chains.isChainLink (".FTSE"));
 		assertFalse (".AV.O", Chains.isChainLink (".AV.O"));
+		assertTrue ("1.AV.PA", Chains.isChainLink ("1.AV.PA"));
 		assertFalse ("MSFT.O", Chains.isChainLink ("MSFT.O"));
 	}
 

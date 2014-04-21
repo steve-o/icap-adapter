@@ -26,6 +26,7 @@ public class LinkSubscriber implements Client {
 	private final ChainSubscriber chain;
 	private final TibMsg msg;
 	private final TibField field;
+	private final String name;
 
 	private final Optional<String>[] items;
 	private int ref_count;
@@ -39,6 +40,7 @@ public class LinkSubscriber implements Client {
 		this.chain = chain;
 		this.msg = msg;
 		this.field = field;
+		this.name = name;
 
 /* each link in chain */
 		this.items = new Optional[MAX_ITEMS_IN_LINK];
@@ -51,7 +53,7 @@ public class LinkSubscriber implements Client {
 		this.next_link_subscriber = Optional.absent();
 
 /* market data subscription */
-		this.handle = Optional.of (this.chain.SubscribeLink (name, this));
+		this.handle = Optional.fromNullable (this.chain.SubscribeLink (name, this));
 	}
 
 	public void Clear() {
@@ -62,7 +64,7 @@ public class LinkSubscriber implements Client {
 		}
 		Arrays.fill (this.items, Optional.absent());
 		if (this.handle.isPresent()) {
-			this.chain.UnsubscribeLink (this.handle.get());
+			this.chain.UnsubscribeLink (this.name, this.handle.get());
 			this.handle = Optional.absent();
 		}
 		if (this.next_lr.isPresent()) {
@@ -178,7 +180,7 @@ public class LinkSubscriber implements Client {
 	private void OnNewNextLink (String next_lr) {
 		LOG.trace ("Chain link new NEXT_LR \"{}\"", next_lr);
 		this.next_lr = Optional.of (next_lr);
-		this.next_link_subscriber = Optional.of (new LinkSubscriber (this.chain, this.msg, this.field, next_lr));
+		this.next_link_subscriber = Optional.fromNullable (new LinkSubscriber (this.chain, this.msg, this.field, next_lr));
 	}
 
 	private void OnUpdateNextLink (String next_lr) {

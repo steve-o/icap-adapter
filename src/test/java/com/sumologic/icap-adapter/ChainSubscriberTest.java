@@ -193,6 +193,52 @@ public class ChainSubscriberTest extends TestCase {
 		verify (this.subscriber).unsubscribe (handle0);
 		verifyNoMoreInteractions (this.subscriber);
 	}
+
+	@Test
+	public void CyclicLink() throws TibException {
+		this.subscription.setItemName ("0#.FTSE");
+/* one link */
+		Handle handle0 = mock (Handle.class), handle1 = mock (Handle.class);
+		when (this.subscriber.subscribe (eq (this.queue), any (MarketDataItemSub.class), any (Client.class), any()))
+			.thenReturn (handle0, handle1);
+		this.chain = new ChainSubscriber (this.subscriber, this.msg, this.field, this.queue, this.subscription, this.listener, this.closure);
+		ArgumentCaptor<MarketDataItemSub> subscription0 = ArgumentCaptor.forClass (MarketDataItemSub.class);
+		ArgumentCaptor<Client> client0 = ArgumentCaptor.forClass (Client.class);
+		verify (this.subscriber).subscribe (eq (this.queue), subscription0.capture(), client0.capture(), any());
+		assertEquals ("0#.FTSE", subscription0.getValue().getItemName());
+		MarketDataItemEvent event = mock (MarketDataItemEvent.class);
+		when (event.isEventStreamClosed()).thenReturn (false);
+		when (event.getType()).thenReturn (Event.MARKET_DATA_ITEM_EVENT);
+		when (event.getMarketDataMsgType()).thenReturn (MarketDataItemEvent.IMAGE);
+		this.msg.ReUse();
+		TibField field = new TibField ("NEXT_LR", "1#.FTSE");
+		field.SetMfeedFid (238);
+		this.msg.Append (field);
+		byte[] data = this.msg.Packed();
+		when (event.getData()).thenReturn (data);
+		client0.getValue().processEvent (event);
+		verify (event, atLeastOnce()).getType();
+		verify (event, atLeastOnce()).getMarketDataMsgType();
+		ArgumentCaptor<MarketDataItemSub> subscription1 = ArgumentCaptor.forClass (MarketDataItemSub.class);
+		ArgumentCaptor<Client> client1 = ArgumentCaptor.forClass (Client.class);
+		verify (this.subscriber, times (2)).subscribe (eq (this.queue), subscription1.capture(), client1.capture(), any());
+		assertEquals ("1#.FTSE", subscription1.getValue().getItemName());
+		field = new TibField ("NEXT_LR", "0#.FTSE");
+		field.SetMfeedFid (238);
+		this.msg.Update (field);
+		data = this.msg.Packed();
+		when (event.getData()).thenReturn (data);
+		client1.getValue().processEvent (event);
+		verify (event, atLeastOnce()).getType();
+		verify (event, atLeastOnce()).getMarketDataMsgType();
+		verifyNoMoreInteractions (this.subscriber);
+/* close out */
+		reset (this.subscriber);
+		this.chain.Clear();
+		verify (this.subscriber).unsubscribe (handle1);
+		verify (this.subscriber).unsubscribe (handle0);
+		verifyNoMoreInteractions (this.subscriber);
+	}
 }
 
 /* eof */

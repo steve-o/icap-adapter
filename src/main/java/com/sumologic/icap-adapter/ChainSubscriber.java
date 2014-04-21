@@ -3,10 +3,12 @@
 
 package com.sumologic.IcapAdapter;
 
+import java.util.Set;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.google.common.collect.HashMultiset;
 import com.google.common.collect.Multiset;
+import com.google.common.collect.Sets;
 import com.reuters.rfa.common.Client;
 import com.reuters.rfa.common.EventQueue;
 import com.reuters.rfa.common.Handle;
@@ -24,6 +26,7 @@ public class ChainSubscriber implements Handle {
 	private final ChainListener listener;
 	private final java.lang.Object closure;
 	private final LinkSubscriber link_subscriber;
+	private final Set<String> all_links;
 	private final Multiset<String> all_items;
 
 	ChainSubscriber (MarketDataSubscriber aSubscriber, TibMsg msg, TibField field, EventQueue aQueue, MarketDataItemSub aSubscription, ChainListener listener, java.lang.Object aClosure) {
@@ -33,8 +36,9 @@ public class ChainSubscriber implements Handle {
 		this.listener = listener;
 		this.closure = aClosure;
 
+/* set of all link names to prevent cyclic subscriptions */
+		this.all_links = Sets.newHashSet();
 		this.link_subscriber = new LinkSubscriber (this, msg, field, this.marketDataItemSub.getItemName());
-
 /* superset of item names */
 		this.all_items = HashMultiset.create();
 	}
@@ -48,14 +52,23 @@ public class ChainSubscriber implements Handle {
 		return true;
 	}
 
+/* Returns null on cyclic subscription */
 	public Handle SubscribeLink (String link_name, Client client) {
-		LOG.trace ("Subscribing to chain link {}", link_name);
-		this.marketDataItemSub.setItemName (link_name);
-		return this.market_data_subscriber.subscribe (this.event_queue, this.marketDataItemSub, client, null);
+		if (this.all_links.contains (link_name)) {
+			LOG.warn ("Ignoring cyclic link subscription {}", link_name);
+			return null;
+		} else {
+			LOG.trace ("Subscribing to chain link {}", link_name);
+			this.all_links.add (link_name);
+			this.marketDataItemSub.setItemName (link_name);
+			return this.market_data_subscriber.subscribe (this.event_queue, this.marketDataItemSub, client, null);
+		}
 	}
 
-	public void UnsubscribeLink (Handle handle) {
+	public void UnsubscribeLink (String link_name, Handle handle) {
+		LOG.trace ("Unsubscribing to chain link {}", link_name);
 		this.market_data_subscriber.unsubscribe (handle);
+		this.all_links.remove (link_name);
 	}
 
 /* Can propagate fairly useless values like the empty string "" */
