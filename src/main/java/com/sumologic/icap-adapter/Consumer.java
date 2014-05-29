@@ -1146,7 +1146,13 @@ public class Consumer implements Client, ChainListener {
 					}
 				}
 			}
-			this.sb.append ("}}");
+			if (item_stream.isInAChain()) {
+				this.sb.append ("},")
+					.append ("\"chains\":").append (item_stream.getChainSetAsString())
+					.append ("}");
+			} else {
+				this.sb.append ("}}");
+			}
 /* Ignore updates with no matching fields */
 			if (!this.field_set.isEmpty()) {
 				LOG.info (ICAP_MARKER, this.sb.toString());
@@ -1240,12 +1246,15 @@ public class Consumer implements Client, ChainListener {
 					this.market_data_subscriber.unregisterClient (stream.getTimerHandle());
 					stream.clearTimerHandle();
 					LOG.trace ("Removed \"{}\" from pending removal queue.", item_name);
+				} else {
+					stream.addChain (chain.getItemName(), this.gson);
 				}
 			} else {
 				final String[] view_by_name = chain.getViewByName().toArray (new String[0]);
 				final Instrument instrument = new Instrument (chain.getServiceName(), item_name, view_by_name);
 				final ItemStream stream = new ItemStream();
 				this.createItemStream (instrument, stream);
+				stream.addChain (chain.getItemName(), this.gson);
 			}
 		}
 	}
@@ -1268,8 +1277,14 @@ public class Consumer implements Client, ChainListener {
 			if (1 == stream.referenceExchangeAdd (-1)) {
 				final TimerIntSpec timer = new TimerIntSpec();
 				timer.setDelay (GC_DELAY_MS);
-				stream.setTimerHandle (this.market_data_subscriber.registerClient (this.event_queue, timer, this, stream));
+				final Handle timer_handle = this.market_data_subscriber.registerClient (this.event_queue, timer, this, stream);
+				if (timer_handle.isActive())
+					stream.setTimerHandle (timer_handle);
+				else
+					LOG.error ("Timer handle for \"{}\" closed on registration.", item_name);
 				LOG.trace ("Added \"{}\" to pending removal queue.", item_name);
+			} else {
+				stream.removeChain (chain.getItemName(), this.gson);
 			}
 		}
 	}
@@ -1281,9 +1296,12 @@ public class Consumer implements Client, ChainListener {
 /* timer should be closed by RFA when non-repeating. */
 		if (event.isEventStreamClosed()) {
 			LOG.trace ("Timer handle for \"{}\" is closed.", stream.getItemName());
-		} else {
+		} else if (null != stream.getTimerHandle()) {
 			this.market_data_subscriber.unregisterClient (stream.getTimerHandle());
 			LOG.trace ("Removed \"{}\" from pending removal queue.", stream.getItemName());
+		} else {
+			LOG.error ("Null timer handle on timer event for \"{}\", reference count #{}.", stream.getItemName(), stream.getReferenceCount());
+			return;
 		}
 		stream.clearTimerHandle();
 		if (0 == stream.referenceExchangeAdd (0)) {

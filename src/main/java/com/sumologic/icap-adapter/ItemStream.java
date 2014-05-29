@@ -3,7 +3,10 @@
 
 package com.sumologic.IcapAdapter;
 
+import java.util.Map;
 import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.collect.Maps;
+import com.google.gson.Gson;
 import com.reuters.rfa.common.Handle;
 
 public class ItemStream {
@@ -13,6 +16,8 @@ public class ItemStream {
 /* Service origin, e.g. IDN_RDF */
 	private String service_name;
 
+	private Map<String, Integer> chain_map;
+
 /* Pseudo-view parameter, an array of field names */
 	private ImmutableSortedSet<String> view_by_name;
 	private ImmutableSortedSet<Integer> view_by_fid;
@@ -21,11 +26,13 @@ public class ItemStream {
 	private Handle item_handle;
 
 	private int reference_count;
+	private String chain_set_as_string;
 	private Handle timer_handle;
 
 /* Performance counters */
 
 	public ItemStream() {
+		this.chain_map = Maps.newLinkedHashMap();
 		this.setItemHandle (null);
 		this.reference_count = 1;
 	}
@@ -44,6 +51,34 @@ public class ItemStream {
 
 	public void setServiceName (String service_name) {
 		this.service_name = service_name;
+	}
+
+/* Account for all chains containing this item name, to optimise logging we
+ * must pre-serialize the chain collection to a string via a provided Gson
+ * instance so we don't have to create or store our own.
+ */
+	public void addChain (String chain, Gson gson) {
+		final Integer chain_reference = this.chain_map.get (chain);
+		if (null == chain_reference) {
+			this.chain_map.put (chain, 1);
+		} else {
+			this.chain_map.put (chain, chain_reference + 1);
+		}
+		this.chain_set_as_string = gson.toJson (this.chain_map.keySet());
+	}
+
+	public void removeChain (String chain, Gson gson) {
+		final Integer chain_reference = this.chain_map.get (chain);
+		if (1 == chain_reference) {
+			this.chain_map.remove (chain);
+		} else {
+			this.chain_map.put (chain, chain_reference - 1);
+		}
+		this.chain_set_as_string = gson.toJson (this.chain_map.keySet());
+	}
+
+	public boolean isInAChain() {
+		return !this.chain_map.isEmpty();
 	}
 
 	public ImmutableSortedSet<String> getViewByName() {
@@ -90,6 +125,14 @@ public class ItemStream {
 		final int old = this.reference_count;
 		this.reference_count += val;
 		return old;
+	}
+
+	public int getReferenceCount() {
+		return this.reference_count;
+	}
+
+	public String getChainSetAsString() {
+		return this.chain_set_as_string;
 	}
 
 	public Handle getTimerHandle() {
