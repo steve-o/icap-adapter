@@ -244,7 +244,10 @@ public class Consumer implements Client, ChainListener {
 		}
 
 /* Null object support */
-		this.gson = new GsonBuilder().serializeNulls().create();
+		this.gson = new GsonBuilder()
+				.disableHtmlEscaping()
+				.serializeNulls()
+				.create();
 
 /* Manual serialisation */
 		this.sb = new StringBuilder (512);
