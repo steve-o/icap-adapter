@@ -2,17 +2,25 @@
 <Configuration status="warn" shutdownHook="enable">
   <Properties>
     <Property name="filename">logs/icap.log</Property>
+    <Property name="exception">logs/exception.log</Property>
   </Properties>
   <Appenders>
     <Console name="Console" target="SYSTEM_OUT">
-      <PatternLayout pattern="%d %-5p [%t] %C{2} (%F:%L) - %m%n"/>
+      <PatternLayout pattern="[%t] %m%n"/>
     </Console>
-    <RollingRandomAccessFile name="File" fileName="${filename}"
-    	filePattern="logs/icap.log.bak">
+    <RollingRandomAccessFile name="File" fileName="${filename}" filePattern="${filename}.bak">
+      <MarkerFilter marker="ICAP" onMatch="ACCEPT" onMismatch="DENY"/>
       <PatternLayout pattern="%m%n"/>
       <Policies>
         <OnStartupTriggeringPolicy />
         <SizeBasedTriggeringPolicy size="256 MB"/>
+      </Policies>
+    </RollingRandomAccessFile>
+    <RollingRandomAccessFile name="Exception" fileName="${exception}" filePattern="${exception}.bak" immediateFlush="true">
+      <PatternLayout pattern="%d %p %c{1.} [%t] %m%n"/>
+      <Policies>
+        <OnStartupTriggeringPolicy />
+        <SizeBasedTriggeringPolicy size="1 MB"/>
       </Policies>
     </RollingRandomAccessFile>
   </Appenders>
@@ -20,9 +28,11 @@
     <Logger name="com.reuters.rfa" level="warn"/>
     <Logger name="com.sumologic.IcapAdapter.Consumer" level="info" additivity="false">
       <AppenderRef ref="File"/>
+      <AppenderRef ref="Exception" level="error"/>
     </Logger>
     <Root level="error">
       <AppenderRef ref="Console"/>
+      <AppenderRef ref="Exception"/>
     </Root>
   </Loggers>
 </Configuration>

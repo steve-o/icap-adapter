@@ -309,8 +309,8 @@ public class IcapAdapter {
 /* manual shutdown */
 			LOG.trace ("Mainloop deactivated.");
 			return;
-		} catch (DispatchException e) {
-			e.printStackTrace();
+		} catch (Exception e) {
+			LOG.catching (e);
 		}
 	}
 

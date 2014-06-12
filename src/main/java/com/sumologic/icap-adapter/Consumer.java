@@ -347,6 +347,15 @@ public class Consumer implements Client, ChainListener {
  * the provider state on behalf of the application.
  */
 	public void createItemStream (Instrument instrument, ItemStream item_stream) {
+/* Construct directory unique key */
+		this.sb.setLength (0);
+		this.sb	.append (instrument.getService())
+			.append ('.')
+			.append (instrument.getName());
+		this.createItemStream (instrument, item_stream, this.sb.toString());
+	}
+
+	public void createItemStream (Instrument instrument, ItemStream item_stream, String key) {
 		LOG.trace ("Creating item stream for RIC \"{}\" on service \"{}\".", instrument.getName(), instrument.getService());
 		item_stream.setItemName (instrument.getName());
 		item_stream.setServiceName (instrument.getService());
@@ -354,11 +363,6 @@ public class Consumer implements Client, ChainListener {
 		final ImmutableSortedSet<String> view_by_name = ImmutableSortedSet.copyOf (instrument.getFields());
 		item_stream.setViewByName (view_by_name);
 
-/* Construct directory unique key */
-		this.sb.setLength (0);
-		this.sb	.append (instrument.getService())
-			.append ('.')
-			.append (instrument.getName());
 		if (!this.is_muted) {
 			if (this.config.getProtocol().equalsIgnoreCase (RSSL_PROTOCOL)) {
 				this.sendItemRequest (item_stream);
@@ -368,24 +372,28 @@ public class Consumer implements Client, ChainListener {
 				this.addSubscription (item_stream);
 			}
 		}
-		this.directory.put (this.sb.toString(), item_stream);
+		this.directory.put (key, item_stream);
 		LOG.trace ("Directory size: {}", this.directory.size());
 	}
 
 	public void destroyItemStream (ItemStream item_stream) {
-		LOG.trace ("Destroying item stream for RIC \"{}\" on service \"{}\".", item_stream.getItemName(), item_stream.getServiceName());
 /* Construct directory unique key */
 		this.sb.setLength (0);
-		this.sb	.append (item_stream.getServiceName())
+		this.sb .append (item_stream.getServiceName())
 			.append ('.')
 			.append (item_stream.getItemName());
+		this.destroyItemStream (item_stream, this.sb.toString());
+	}
+
+	public void destroyItemStream (ItemStream item_stream, String key) {
+		LOG.trace ("Destroying item stream for RIC \"{}\" on service \"{}\".", item_stream.getItemName(), item_stream.getServiceName());
 		if (this.config.getProtocol().equalsIgnoreCase (RSSL_PROTOCOL)) {
 			this.cancelItemRequest (item_stream);
 		}
 		else if (this.config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL)) {
 			this.removeSubscription (item_stream);
 		}
-		this.directory.remove (this.sb.toString());
+		this.directory.remove (key);
 		LOG.trace ("Directory size: {}", this.directory.size());
 	}
 
@@ -1248,15 +1256,20 @@ public class Consumer implements Client, ChainListener {
 /* Track additional reference on active subscription */
 				final ItemStream stream = this.directory.get (key);
 				if (0 == stream.referenceExchangeAdd (1)) {
-					this.market_data_subscriber.unregisterClient (stream.getTimerHandle());
-					stream.clearTimerHandle();
+					final Handle timer_handle = stream.getTimerHandle();
+					if (null == timer_handle) {
+						LOG.error ("Timer handle for \"{}\" is null.", item_name);
+					} else {
+						this.market_data_subscriber.unregisterClient (timer_handle);
+						stream.clearTimerHandle();
+					}
 					LOG.trace ("Removed \"{}\" from pending removal queue.", item_name);
 				}
 			} else {
 				final String[] view_by_name = chain.getViewByName().toArray (new String[0]);
 				final Instrument instrument = new Instrument (chain.getServiceName(), item_name, view_by_name);
 				final ItemStream stream = new ItemStream();
-				this.createItemStream (instrument, stream);
+				this.createItemStream (instrument, stream, key);
 				stream.setChainName (chain.getItemName());
 			}
 		}
@@ -1279,7 +1292,10 @@ public class Consumer implements Client, ChainListener {
 				.append (item_name);
 			final String key = this.sb.toString();
 			final ItemStream stream = this.directory.get (key);
-			if (1 == stream.referenceExchangeAdd (-1)) {
+/* If adapter configured with multiple copies of the same chain. */
+			if (null == stream) {
+				LOG.error ("Item stream \"{}\" already removed from directory.", item_name);
+			} else if (1 == stream.referenceExchangeAdd (-1)) {
 				final TimerIntSpec timer = new TimerIntSpec();
 				timer.setDelay (GC_DELAY_MS);
 				final Handle timer_handle = this.market_data_subscriber.registerClient (this.event_queue, timer, this, stream);
@@ -1302,16 +1318,25 @@ public class Consumer implements Client, ChainListener {
 		} else if (null != stream.getTimerHandle()) {
 			this.market_data_subscriber.unregisterClient (stream.getTimerHandle());
 			LOG.trace ("Removed \"{}\" from pending removal queue.", stream.getItemName());
+		}
+/* prevent repeated invocation */
+		if (null != stream.getTimerHandle()) {
+			stream.clearTimerHandle();
+			if (0 == stream.referenceExchangeAdd (0)) {
+				this.sb.setLength (0);
+				this.sb	.append (stream.getServiceName())
+					.append ('.')
+					.append (stream.getChainName())
+					.append ('.')
+					.append (stream.getItemName());
+				final String key = this.sb.toString();
+				this.destroyItemStream (stream, key);
+			} else {
+/* nop */
+				LOG.trace ("Stream reference non-zero on garbage collect for \"{}\".", stream.getItemName());
+			}
 		} else {
 			LOG.error ("Null timer handle on timer event for \"{}\", reference count #{}.", stream.getItemName(), stream.getReferenceCount());
-			return;
-		}
-		stream.clearTimerHandle();
-		if (0 == stream.referenceExchangeAdd (0)) {
-			this.destroyItemStream (stream);
-		} else {
-/* nop */
-			LOG.trace ("Stream reference non-zero on garbage collect for \"{}\".", stream.getItemName());
 		}
 	}
 }
