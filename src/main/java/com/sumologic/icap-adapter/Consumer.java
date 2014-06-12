@@ -1149,9 +1149,9 @@ public class Consumer implements Client, ChainListener {
 					}
 				}
 			}
-			if (item_stream.isInAChain()) {
+			if (item_stream.hasChainName()) {
 				this.sb.append ("},")
-					.append ("\"chains\":").append (item_stream.getChainSetAsString())
+					.append ("\"chain\":\"").append (item_stream.getChainName()).append ('\"')
 					.append ("}");
 			} else {
 				this.sb.append ("}}");
@@ -1240,6 +1240,8 @@ public class Consumer implements Client, ChainListener {
 			this.sb.setLength (0);
 			this.sb	.append (chain.getServiceName())
 				.append ('.')
+				.append (chain.getItemName())
+				.append ('.')
 				.append (item_name);
 			final String key = this.sb.toString();
 			if (this.directory.containsKey (key)) {
@@ -1249,15 +1251,13 @@ public class Consumer implements Client, ChainListener {
 					this.market_data_subscriber.unregisterClient (stream.getTimerHandle());
 					stream.clearTimerHandle();
 					LOG.trace ("Removed \"{}\" from pending removal queue.", item_name);
-				} else {
-					stream.addChain (chain.getItemName(), this.gson);
 				}
 			} else {
 				final String[] view_by_name = chain.getViewByName().toArray (new String[0]);
 				final Instrument instrument = new Instrument (chain.getServiceName(), item_name, view_by_name);
 				final ItemStream stream = new ItemStream();
 				this.createItemStream (instrument, stream);
-				stream.addChain (chain.getItemName(), this.gson);
+				stream.setChainName (chain.getItemName());
 			}
 		}
 	}
@@ -1274,6 +1274,8 @@ public class Consumer implements Client, ChainListener {
 			this.sb.setLength (0);
 			this.sb	.append (chain.getServiceName())
 				.append ('.')
+				.append (chain.getItemName())
+				.append ('.')
 				.append (item_name);
 			final String key = this.sb.toString();
 			final ItemStream stream = this.directory.get (key);
@@ -1286,8 +1288,6 @@ public class Consumer implements Client, ChainListener {
 				else
 					LOG.error ("Timer handle for \"{}\" closed on registration.", item_name);
 				LOG.trace ("Added \"{}\" to pending removal queue.", item_name);
-			} else {
-				stream.removeChain (chain.getItemName(), this.gson);
 			}
 		}
 	}
