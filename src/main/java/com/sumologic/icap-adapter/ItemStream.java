@@ -3,8 +3,11 @@
 
 package com.sumologic.IcapAdapter;
 
+import java.util.Map;
 import com.google.common.base.Optional;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.collect.Maps;
 import com.reuters.rfa.common.Handle;
 
 public class ItemStream {
@@ -24,6 +27,10 @@ public class ItemStream {
 /* Subscription handle which is valid from login success to login close. */
 	private Handle item_handle;
 
+/* Psuedo ripple fields */
+	private ImmutableMap<Integer, String> ripple_field_dictionary;
+	private Map<Integer, String> last_value_cache;
+
 	private int reference_count;
 	private Handle timer_handle;
 
@@ -32,6 +39,7 @@ public class ItemStream {
 	public ItemStream() {
 		this.chain_name = Optional.absent();
 		this.setItemHandle (null);
+		this.last_value_cache = Maps.newHashMap();
 		this.reference_count = 1;
 	}
 
@@ -101,6 +109,26 @@ public class ItemStream {
 
 	public void clearItemHandle() {
 		this.setItemHandle (null);
+	}
+
+	public void setRippleFieldDictionary (ImmutableMap<Integer, String> map) {
+		this.ripple_field_dictionary = map;
+	}
+
+	public String getRippleField (int fid) {
+		return this.ripple_field_dictionary.get (fid);
+	}
+
+	public boolean hasLastValue (int fid) {
+		return this.last_value_cache.containsKey (fid);
+	}
+
+	public String getLastValue (int fid) {
+		return this.last_value_cache.get (fid);
+	}
+
+	public void setLastValue (int fid, String value) {
+		this.last_value_cache.put (fid, value);
 	}
 
 	public int referenceExchangeAdd (int val) {

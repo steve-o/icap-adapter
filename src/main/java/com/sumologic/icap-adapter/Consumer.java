@@ -369,6 +369,7 @@ public class Consumer implements Client, ChainListener {
 			}
 			else if (this.config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL)) {
 				item_stream.setViewByFid (this.createViewByFid (item_stream.getViewByName()));
+				item_stream.setRippleFieldDictionary (this.createRippleFieldDictionary (item_stream.getViewByName()));
 				this.addSubscription (item_stream);
 			}
 		}
@@ -405,7 +406,7 @@ public class Consumer implements Client, ChainListener {
 			for (int i = 0; i < mfeed_dictionary.length; i++) {
 				if (null == mfeed_dictionary[i]) continue;
 				final int fid = (i > TibMsg.GetMfeedDictPosFids()) ? (TibMsg.GetMfeedDictPosFids() - i) : i;
-				map.put (mfeed_dictionary[i].fname, new Integer (fid));
+				map.put (mfeed_dictionary[i].fname, Integer.valueOf (fid));
 			}
 		}
 		return ImmutableMap.copyOf (map);
@@ -419,6 +420,25 @@ public class Consumer implements Client, ChainListener {
 		}
 		final Integer[] fid_array = fid_list.toArray (new Integer [fid_list.size()]);
 		return ImmutableSortedSet.copyOf (fid_array);
+	}
+
+/* Convert a set of FID names to psuedo ripple field names */
+	private ImmutableMap<Integer, String> createRippleFieldDictionary (ImmutableSortedSet<String> view_by_name) {
+		Map<Integer, String> map = Maps.newHashMap();
+		for (String name : view_by_name) {
+			final Integer fid = this.appendix_a.get (name);
+			this.sb.setLength (0);
+/* explicitly ignores _2 or similar */
+			if (name.endsWith ("_1")) {
+				this.sb.append (name.substring (0, name.length() - 1));
+				this.sb.append ("2");
+			} else {
+				this.sb.append (name);
+				this.sb.append ("_1");
+			}
+			map.put (fid, this.sb.toString());
+		}
+		return ImmutableMap.copyOf (map);
 	}
 
 	public void resubscribe() {
@@ -445,6 +465,7 @@ public class Consumer implements Client, ChainListener {
 			for (ItemStream item_stream : this.directory.values()) {
 				if (!item_stream.hasViewByFid()) {
 					item_stream.setViewByFid (this.createViewByFid (item_stream.getViewByName()));
+					item_stream.setRippleFieldDictionary (this.createRippleFieldDictionary (item_stream.getViewByName()));
 				}
 				if (!item_stream.hasItemHandle()) {
 					this.addSubscription (item_stream);
@@ -979,9 +1000,9 @@ public class Consumer implements Client, ChainListener {
 			item_stream.clearItemHandle();
 		}
 /* strings in switch are not supported in -source 1.6 */
-/* ignore initial images and refreshes */
+/* use refresh to capture last value only */
 		if (MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()) {
-			LOG.trace ("Ignoring solicited image.");
+			this.updateLastValueCache (event);
 			return;
 		}
 		else if (MarketDataItemEvent.UPDATE == event.getMarketDataMsgType()) {
@@ -1146,12 +1167,23 @@ public class Consumer implements Client, ChainListener {
 						case TibMsg.TIBMSG_INT:
 						case TibMsg.TIBMSG_REAL:
 						case TibMsg.TIBMSG_UINT:
-							this.sb.append (this.field.StringData());
+							this.sb.append (this.field.StringData())
+								.append (",\"")
+								.append (item_stream.getRippleField (field.MfeedFid()))
+								.append ("\":")
+								.append (item_stream.getLastValue (field.MfeedFid()));
 							break;
 						default:
-							this.sb.append ('\"').append (this.field.StringData()).append ('\"');
+							this.sb.append ('\"').append (this.field.StringData()).append ('\"')
+								.append (",\"")
+								.append (item_stream.getRippleField (field.MfeedFid()))
+								.append ("\":\"")
+								.append (item_stream.getLastValue (field.MfeedFid()))
+								.append ('\"');
 							break;
 						}
+/* store last value */
+						item_stream.setLastValue (field.MfeedFid(), this.field.StringData());
 						this.field_set.add (this.field.MfeedFid());
 						if (view.size() == this.field_set.size()) break;
 					}
@@ -1167,6 +1199,36 @@ public class Consumer implements Client, ChainListener {
 /* Ignore updates with no matching fields */
 			if (!this.field_set.isEmpty()) {
 				LOG.info (ICAP_MARKER, this.sb.toString());
+			}
+		} catch (TibException e) {
+			LOG.trace ("Unable to unpack data with TibMsg: {}", e.getMessage());
+		}
+	}
+
+	private void updateLastValueCache (MarketDataItemEvent event) {
+		final ItemStream item_stream = (ItemStream)event.getClosure();
+/* silently ignore */
+		if (MarketDataEnums.DataFormat.MARKETFEED != event.getDataFormat())
+			return;
+		final byte[] data = event.getData();
+		final int length = (data != null ? data.length : 0);
+		if (0 == length) return;
+		try {
+			this.msg.UnPack (data);
+/* Use field_set to also count matching FIDs in update to view */
+			this.field_set.clear();
+			if (item_stream.hasViewByFid()) {
+				final ImmutableSortedSet<Integer> view = item_stream.getViewByFid();
+				for (int status = this.field.First (msg);
+					TibMsg.TIBMSG_OK == status;
+					status = this.field.Next())
+				{
+					if (view.contains (field.MfeedFid())) {
+						item_stream.setLastValue (field.MfeedFid(), this.field.StringData());
+						this.field_set.add (this.field.MfeedFid());
+						if (view.size() == this.field_set.size()) break;
+					}
+				}
 			}
 		} catch (TibException e) {
 			LOG.trace ("Unable to unpack data with TibMsg: {}", e.getMessage());

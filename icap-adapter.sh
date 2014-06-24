@@ -8,7 +8,7 @@ ENABLEASSERTIONS=-enableassertions
 ENABLEASSERTIONS=
 
 ICAP=target/classes
-ICAP=target/icap-adapter-2.6-SNAPSHOT.jar
+ICAP=target/icap-adapter-3.0-SNAPSHOT.jar
 
 # Apache Commons command-line-processor
 COMMONSCLI=commons-cli-1.2.jar
