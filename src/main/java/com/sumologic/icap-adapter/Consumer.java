@@ -428,14 +428,8 @@ public class Consumer implements Client, ChainListener {
 		for (String name : view_by_name) {
 			final Integer fid = this.appendix_a.get (name);
 			this.sb.setLength (0);
-/* explicitly ignores _2 or similar */
-			if (name.endsWith ("_1")) {
-				this.sb.append (name.substring (0, name.length() - 1));
-				this.sb.append ("2");
-			} else {
-				this.sb.append (name);
-				this.sb.append ("_1");
-			}
+			this.sb.append (name)
+				.append ("_PRV");
 			map.put (fid, this.sb.toString());
 		}
 		return ImmutableMap.copyOf (map);
@@ -1000,16 +994,14 @@ public class Consumer implements Client, ChainListener {
 			item_stream.clearItemHandle();
 		}
 /* strings in switch are not supported in -source 1.6 */
-/* use refresh to capture last value only */
-		if (MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()) {
-			this.updateLastValueCache (event);
-			return;
-		}
-		else if (MarketDataItemEvent.UPDATE == event.getMarketDataMsgType()) {
+		if (MarketDataItemEvent.UPDATE == event.getMarketDataMsgType()) {
 /* fall through */
 		}
-		else if (MarketDataItemEvent.UNSOLICITED_IMAGE == event.getMarketDataMsgType()) {
-			LOG.trace ("Ignoring unsolicited image.");
+/* use refresh to capture last value only */
+		else if (MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()
+			|| MarketDataItemEvent.UNSOLICITED_IMAGE == event.getMarketDataMsgType())
+		{
+			this.updateLastValueCache (event);
 			return;
 		}
 		else if (MarketDataItemEvent.STATUS == event.getMarketDataMsgType()) {
@@ -1149,7 +1141,7 @@ public class Consumer implements Client, ChainListener {
 				.append (",\"type\":\"UPDATE\"")
 				.append (",\"service\":\"").append (item_stream.getServiceName()).append ('\"')
 				.append (",\"recordname\":\"").append (item_stream.getItemName()).append ('\"')
-				.append (",\"fields\":{");
+				.append (",\"fields\":[");
 /* Use field_set to also count matching FIDs in update to view */
 			this.field_set.clear();
 			if (item_stream.hasViewByFid()) {
@@ -1160,26 +1152,32 @@ public class Consumer implements Client, ChainListener {
 				{
 					if (view.contains (field.MfeedFid())) {
 						if (!this.field_set.isEmpty()) this.sb.append (',');
-						this.sb.append ('\"').append (this.field.Name()).append ("\":");
 						switch (this.field.Type()) {
 /* values that can be represented raw in JSON form */
 						case TibMsg.TIBMSG_BOOLEAN:
 						case TibMsg.TIBMSG_INT:
 						case TibMsg.TIBMSG_REAL:
 						case TibMsg.TIBMSG_UINT:
-							this.sb.append (this.field.StringData())
-								.append (",\"")
-								.append (item_stream.getRippleField (field.MfeedFid()))
-								.append ("\":")
-								.append (item_stream.getLastValue (field.MfeedFid()));
+							this.sb.append ('{')
+								.append ('\"').append (this.field.Name()).append ('\"')
+								.append (':')
+								.append (this.field.StringData())
+								.append (',')
+								.append ('\"').append (item_stream.getRippleField (field.MfeedFid())).append ('\"')
+								.append (':')
+								.append (item_stream.getLastValue (field.MfeedFid()))
+								.append ('}');
 							break;
 						default:
-							this.sb.append ('\"').append (this.field.StringData()).append ('\"')
-								.append (",\"")
-								.append (item_stream.getRippleField (field.MfeedFid()))
-								.append ("\":\"")
-								.append (item_stream.getLastValue (field.MfeedFid()))
-								.append ('\"');
+							this.sb.append ('{')
+								.append ('\"').append (this.field.Name()).append ('\"')
+								.append (':')
+								.append ('\"').append (this.field.StringData()).append ('\"')
+								.append (',')
+								.append ('\"').append (item_stream.getRippleField (field.MfeedFid())).append ('\"')
+								.append (':')
+								.append ('\"').append (item_stream.getLastValue (field.MfeedFid())).append ('\"')
+								.append ('}');
 							break;
 						}
 /* store last value */
@@ -1190,11 +1188,11 @@ public class Consumer implements Client, ChainListener {
 				}
 			}
 			if (item_stream.hasChainName()) {
-				this.sb.append ("},")
+				this.sb.append ("],")
 					.append ("\"chain\":\"").append (item_stream.getChainName()).append ('\"')
 					.append ("}");
 			} else {
-				this.sb.append ("}}");
+				this.sb.append ("]}");
 			}
 /* Ignore updates with no matching fields */
 			if (!this.field_set.isEmpty()) {

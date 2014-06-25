@@ -4,7 +4,7 @@
 
   <groupId>com.sumologic</groupId>
   <artifactId>icap-adapter</artifactId>
-  <version>3.0-SNAPSHOT</version>
+  <version>3.2-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>icap-adapter</name>
