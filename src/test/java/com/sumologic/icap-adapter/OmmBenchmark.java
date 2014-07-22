@@ -74,6 +74,7 @@ public class OmmBenchmark {
  *     </dataBody>
  * </updateMsg>
  */
+	@SuppressWarnings("unchecked")
 	@BeforeExperiment void setUp() {
 		pool = OMMPool.create ("RWF",
 				14,	/* RWF major version */

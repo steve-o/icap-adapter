@@ -1001,7 +1001,7 @@ public class Consumer implements Client, ChainListener {
 		else if (MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()
 			|| MarketDataItemEvent.UNSOLICITED_IMAGE == event.getMarketDataMsgType())
 		{
-			this.updateLastValueCache (event);
+			this.updateLastValueCache (event, dt);
 			return;
 		}
 		else if (MarketDataItemEvent.STATUS == event.getMarketDataMsgType()) {
@@ -1135,9 +1135,10 @@ public class Consumer implements Client, ChainListener {
 			}
 
 /* ICAP output here, do not use GSON as fields map would be expensive to create. */
+			final String dt_as_string = dt.toString();
 			this.sb.setLength (0);
 			this.sb .append ('{')
-				 .append ("\"timestamp\":\"").append (dt.toString()).append ('\"')
+				 .append ("\"timestamp\":\"").append (dt_as_string).append ('\"')
 				.append (",\"type\":\"UPDATE\"")
 				.append (",\"service\":\"").append (item_stream.getServiceName()).append ('\"')
 				.append (",\"recordname\":\"").append (item_stream.getItemName()).append ('\"')
@@ -1151,6 +1152,9 @@ public class Consumer implements Client, ChainListener {
 					status = this.field.Next())
 				{
 					if (view.contains (field.MfeedFid())) {
+						final String field_data = this.field.StringData();
+						final String ripple_field_name = item_stream.getRippleField (field.MfeedFid());
+						final String[] ripple_field_data = item_stream.getLastValue (field.MfeedFid());
 						if (!this.field_set.isEmpty()) this.sb.append (',');
 						switch (this.field.Type()) {
 /* values that can be represented raw in JSON form */
@@ -1161,27 +1165,35 @@ public class Consumer implements Client, ChainListener {
 							this.sb.append ('{')
 								.append ('\"').append (this.field.Name()).append ('\"')
 								.append (':')
-								.append (this.field.StringData())
+								.append (field_data)
 								.append (',')
-								.append ('\"').append (item_stream.getRippleField (field.MfeedFid())).append ('\"')
+								.append ('\"').append (ripple_field_name).append ('\"')
 								.append (':')
-								.append (item_stream.getLastValue (field.MfeedFid()))
+								.append (ripple_field_data[0])
+								.append (',')
+								.append ('\"').append (ripple_field_name).append ("_TS\"")
+								.append (':')
+								.append ('\"').append (ripple_field_data[1]).append ('\"')
 								.append ('}');
 							break;
 						default:
 							this.sb.append ('{')
 								.append ('\"').append (this.field.Name()).append ('\"')
 								.append (':')
-								.append ('\"').append (this.field.StringData()).append ('\"')
+								.append ('\"').append (field_data).append ('\"')
 								.append (',')
-								.append ('\"').append (item_stream.getRippleField (field.MfeedFid())).append ('\"')
+								.append ('\"').append (ripple_field_name).append ('\"')
 								.append (':')
-								.append ('\"').append (item_stream.getLastValue (field.MfeedFid())).append ('\"')
+								.append ('\"').append (ripple_field_data[0]).append ('\"')
+								.append (',')
+								.append ('\"').append (ripple_field_name).append ("_TS\"")
+								.append (':')
+								.append ('\"').append (ripple_field_data[1]).append ('\"')
 								.append ('}');
 							break;
 						}
 /* store last value */
-						item_stream.setLastValue (field.MfeedFid(), this.field.StringData());
+						item_stream.setLastValue (field.MfeedFid(), new String[]{ field_data, dt_as_string });
 						this.field_set.add (this.field.MfeedFid());
 						if (view.size() == this.field_set.size()) break;
 					}
@@ -1203,7 +1215,7 @@ public class Consumer implements Client, ChainListener {
 		}
 	}
 
-	private void updateLastValueCache (MarketDataItemEvent event) {
+	private void updateLastValueCache (MarketDataItemEvent event, DateTime dt) {
 		final ItemStream item_stream = (ItemStream)event.getClosure();
 /* silently ignore */
 		if (MarketDataEnums.DataFormat.MARKETFEED != event.getDataFormat())
@@ -1217,12 +1229,13 @@ public class Consumer implements Client, ChainListener {
 			this.field_set.clear();
 			if (item_stream.hasViewByFid()) {
 				final ImmutableSortedSet<Integer> view = item_stream.getViewByFid();
+				final String dt_as_string = dt.toString();
 				for (int status = this.field.First (msg);
 					TibMsg.TIBMSG_OK == status;
 					status = this.field.Next())
 				{
 					if (view.contains (field.MfeedFid())) {
-						item_stream.setLastValue (field.MfeedFid(), this.field.StringData());
+						item_stream.setLastValue (field.MfeedFid(), new String[]{ this.field.StringData(), dt_as_string });
 						this.field_set.add (this.field.MfeedFid());
 						if (view.size() == this.field_set.size()) break;
 					}

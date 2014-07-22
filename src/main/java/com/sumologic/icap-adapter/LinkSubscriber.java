@@ -36,6 +36,7 @@ public class LinkSubscriber implements Client {
 
 	private static final int MAX_ITEMS_IN_LINK = 14;
 
+	@SuppressWarnings("unchecked")
 	LinkSubscriber (ChainSubscriber chain, TibMsg msg, TibField field, String name) {
 		this.chain = chain;
 		this.msg = msg;

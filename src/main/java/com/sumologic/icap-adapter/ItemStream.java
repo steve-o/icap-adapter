@@ -29,7 +29,7 @@ public class ItemStream {
 
 /* Psuedo ripple fields */
 	private ImmutableMap<Integer, String> ripple_field_dictionary;
-	private Map<Integer, String> last_value_cache;
+	private Map<Integer, String[]> last_value_cache;
 
 	private int reference_count;
 	private Handle timer_handle;
@@ -123,11 +123,11 @@ public class ItemStream {
 		return this.last_value_cache.containsKey (fid);
 	}
 
-	public String getLastValue (int fid) {
+	public String[] getLastValue (int fid) {
 		return this.last_value_cache.get (fid);
 	}
 
-	public void setLastValue (int fid, String value) {
+	public void setLastValue (int fid, String[] value) {
 		this.last_value_cache.put (fid, value);
 	}
 

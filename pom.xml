@@ -4,7 +4,7 @@
 
   <groupId>com.sumologic</groupId>
   <artifactId>icap-adapter</artifactId>
-  <version>3.2-SNAPSHOT</version>
+  <version>3.3-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>icap-adapter</name>
@@ -19,6 +19,7 @@
           <source>1.6</source>
           <target>1.6</target>
           <showDeprecation>true</showDeprecation>
+          <compilerArgument>-Xlint:unchecked</compilerArgument>
         </configuration>
       </plugin>
       <plugin>
