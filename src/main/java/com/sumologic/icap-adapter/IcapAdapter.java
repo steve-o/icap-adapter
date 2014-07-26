@@ -193,8 +193,11 @@ public class IcapAdapter {
 						if (!field_scanner.hasNext())
 							throw new IOException ("Missing symbol name field in symbol file \"" + this.config.getSymbolPath() + "\" line " + line_number + ".");
 						symbol_name = field_scanner.next();
-						while (field_scanner.hasNext())
-							fields.add (field_scanner.next());
+						while (field_scanner.hasNext()) {
+							final String field = field_scanner.next();
+							if (!field.isEmpty())
+								fields.add (field);
+						}
 						if (!fields.isEmpty()) {
 							Instrument new_instrument = new Instrument (service, symbol_name, fields.toArray (new String[fields.size()]));
 							instruments.add (new_instrument);

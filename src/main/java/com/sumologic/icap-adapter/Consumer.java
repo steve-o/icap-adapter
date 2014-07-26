@@ -416,7 +416,12 @@ public class Consumer implements Client, ChainListener {
 	private ImmutableSortedSet<Integer> createViewByFid (ImmutableSortedSet<String> view_by_name) {
 		final ArrayList<Integer> fid_list = new ArrayList<Integer> (view_by_name.size());
 		for (String name : view_by_name) {
-			fid_list.add (this.appendix_a.get (name));
+			final Integer fid = this.appendix_a.get (name);
+			if (null == fid) {
+				LOG.error ("Field \"{}\" not described in appendix_a dictionary.", name);
+			} else {
+				fid_list.add (fid);
+			}
 		}
 		final Integer[] fid_array = fid_list.toArray (new Integer [fid_list.size()]);
 		return ImmutableSortedSet.copyOf (fid_array);
@@ -427,10 +432,14 @@ public class Consumer implements Client, ChainListener {
 		Map<Integer, String> map = Maps.newHashMap();
 		for (String name : view_by_name) {
 			final Integer fid = this.appendix_a.get (name);
-			this.sb.setLength (0);
-			this.sb.append (name)
-				.append ("_PRV");
-			map.put (fid, this.sb.toString());
+			if (null == fid) {
+				LOG.warn ("Field \"{}\" not described in appendix_a dictionary.", name);
+			} else {
+				this.sb.setLength (0);
+				this.sb.append (name)
+					.append ("_PRV");
+				map.put (fid, this.sb.toString());
+			}
 		}
 		return ImmutableMap.copyOf (map);
 	}
