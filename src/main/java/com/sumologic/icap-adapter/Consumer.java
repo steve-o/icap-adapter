@@ -181,6 +181,16 @@ public class Consumer implements Client, ChainListener {
 
 	public void init() throws Exception {
 		LOG.trace (this.config);
+
+/* Manual serialisation */
+		this.sb = new StringBuilder (512);
+
+/* Null object support */
+		this.gson = new GsonBuilder()
+				.disableHtmlEscaping()
+				.serializeNulls()
+				.create();
+
 /* Configuring the session layer package.
  */
 		LOG.trace ("Acquiring RFA session.");
@@ -242,15 +252,6 @@ public class Consumer implements Client, ChainListener {
 		{
 			throw new Exception ("Unsupported transport protocol \"" + this.config.getProtocol() + "\".");
 		}
-
-/* Null object support */
-		this.gson = new GsonBuilder()
-				.disableHtmlEscaping()
-				.serializeNulls()
-				.create();
-
-/* Manual serialisation */
-		this.sb = new StringBuilder (512);
 
 		this.directory = new LinkedHashMap<String, ItemStream>();
 		this.dictionary_handle = new TreeMap<String, FlaggedHandle>();
