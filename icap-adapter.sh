@@ -14,16 +14,16 @@ ICAP=target/icap-adapter-3.5-SNAPSHOT.jar
 COMMONSCLI=commons-cli-1.2.jar
 
 # Google libraries for JSON serialisation and ISO-8601 time
-GUAVA=guava-16.0.1.jar
+GUAVA=guava-17.0.jar
 GSON=gson-2.2.4.jar
-JODA=joda-time-2.3.jar
+JODA=joda-time-2.4.jar
 
 # Apache Log4j2 and friends
-LOG4J2=log4j-api-2.0-rc1.jar:log4j-core-2.0-rc1.jar
+LOG4J2=log4j-api-2.0.jar:log4j-core-2.0.jar
 # per http://logging.apache.org/log4j/2.x/faq.html#which_jars
-JAVAUTILLOGGINGAPI=jul-to-slf4j-1.7.6.jar
-SLF4JAPI=slf4j-api-1.7.6.jar
-SLF4JBINDING=log4j-slf4j-impl-2.0-rc1.jar
+JAVAUTILLOGGINGAPI=jul-to-slf4j-1.7.7.jar
+SLF4JAPI=slf4j-api-1.7.7.jar
+SLF4JBINDING=log4j-slf4j-impl-2.0.jar
 LOG4J2=$LOG4J2:$SLF4JBINDING:$SLF4JAPI:$JAVAUTILLOGGINGAPI
 
 # Asynchronous logging, requires multiple cores.
