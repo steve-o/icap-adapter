@@ -836,6 +836,9 @@ public class Consumer implements Client, ChainListener {
 			return;
 		}
 
+/* Find /a/ service to request dictionary from.  It doesn't matter which as the ADS is
+ * providing its own dictionary overriding anything from the provider.
+ */
 		String dictionary_service = null;
 		for (Service service : payload.getServiceList()) {
 			if (!service.hasServiceName()) {
@@ -924,28 +927,17 @@ public class Consumer implements Client, ChainListener {
 			LOG.trace ("Dictionary complete.");
 /* Check dictionary version */
 			FieldDictionary field_dictionary = this.rdm_dictionary.getFieldDictionary();
-			final String dictionary_version = field_dictionary.getFieldProperty ("Version");
 			if (RDMDictionary.DictionaryType.RWFFLD == dictionary_type)
 			{
-				LOG.trace ("RDM field definitions version: {}", dictionary_version);
+				LOG.trace ("RDM field definitions version: {}", field_dictionary.getFieldProperty ("Version"));
 			}
 			else if (RDMDictionary.DictionaryType.RWFENUM == dictionary_type)
 			{
-/* Version number for enumerated types is optional */
-				final String matching_field_version = field_dictionary.getEnumProperty ("RT_Version");
-				final String enumtype_version = field_dictionary.getEnumProperty ("DT_Version");
-				if (Strings.isNullOrEmpty (enumtype_version)) {
-					LOG.trace ("Unreported version for enumerated type dictionary.");
-				} else if (!Strings.isNullOrEmpty (matching_field_version)
-					&& !matching_field_version.equals (dictionary_version)) {
-					LOG.error ("Enumerated type dictionary field dictionary version {} conflicts with provided version {}.", matching_field_version, dictionary_version);
-				} else {
-					LOG.trace ("RDM enumerated type version: {} (RT: {})", enumtype_version, matching_field_version);
-				}
+/* Interesting values like Name, RT_Version, Description, Date are not provided by ADS */
+				LOG.trace ("RDM enumerated tables version: {}", field_dictionary.getEnumProperty ("DT_Version"));
 			}
 /* Notify RFA example helper of dictionary if using to dump message content. */
 //			GenericOMMParser.initializeDictionary (field_dictionary);
-
 			this.dictionary_handle.get ((String)closure).setFlag();
 
 /* Check all pending dictionaries */
