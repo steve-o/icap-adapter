@@ -488,7 +488,7 @@ public class Consumer implements Client, ChainListener {
 		msg.setIndicationFlags (OMMMsg.Indication.REFRESH);
 		msg.setAttribInfo (item_stream.getServiceName(), item_stream.getItemName(), RDMInstrument.NameType.RIC);
 
-		LOG.trace ("Registering OMM item interest for MMT_MARKET_PRICE.");
+		LOG.trace ("Registering OMM item interest for MMT_MARKET_PRICE/{}/{}", item_stream.getServiceName(), item_stream.getItemName());
 		OMMItemIntSpec ommItemIntSpec = new OMMItemIntSpec();
 		ommItemIntSpec.setMsg (msg);
 		item_stream.setItemHandle (this.omm_consumer.registerClient (this.event_queue, ommItemIntSpec, this, item_stream));
@@ -585,7 +585,7 @@ public class Consumer implements Client, ChainListener {
 
 		request.setAttrib (attribInfo);
 
-		LOG.trace ("Registering OMM item interest for MMT_LOGIN.");
+		LOG.trace ("Registering OMM item interest for MMT_LOGIN");
 		OMMMsg msg = request.getMsg (this.omm_pool);
 		OMMItemIntSpec ommItemIntSpec = new OMMItemIntSpec();
 		ommItemIntSpec.setMsg (msg);
@@ -612,12 +612,12 @@ public class Consumer implements Client, ChainListener {
 		if (this.config.hasServiceName())
 			attribInfo.setServiceName (this.config.getServiceName());
 
-/* Only request INFO filters */
-		attribInfo.setFilterMask (EnumSet.of (RDMDirectory.FilterMask.INFO));
+/* Request INFO and STATE filters for service names and states */
+		attribInfo.setFilterMask (EnumSet.of (RDMDirectory.FilterMask.INFO, RDMDirectory.FilterMask.STATE));
 
 		request.setAttrib (attribInfo);
 
-		LOG.trace ("Registering OMM item interest for MMT_DIRECTORY.");
+		LOG.trace ("Registering OMM item interest for MMT_DIRECTORY");
 		OMMMsg msg = request.getMsg (this.omm_pool);
 		OMMItemIntSpec ommItemIntSpec = new OMMItemIntSpec();
 		ommItemIntSpec.setMsg (msg);
@@ -642,12 +642,12 @@ public class Consumer implements Client, ChainListener {
 
 // RDMDictionary.Filter.NORMAL=0x7: Provides all information needed for decoding
 		attribInfo.setVerbosity (RDMDictionary.Verbosity.NORMAL);
-		attribInfo.setDictionaryName (dictionary_name);
 		attribInfo.setServiceName (service_name);
+		attribInfo.setDictionaryName (dictionary_name);
 
 		request.setAttrib (attribInfo);
 
-		LOG.trace ("Registering OMM item interest for MMT_DICTIONARY/{}.", dictionary_name);
+		LOG.trace ("Registering OMM item interest for MMT_DICTIONARY/{}/{}", service_name, dictionary_name);
 		OMMMsg msg = request.getMsg (this.omm_pool);
 		OMMItemIntSpec ommItemIntSpec = new OMMItemIntSpec();
 		ommItemIntSpec.setMsg (msg);
@@ -814,110 +814,82 @@ public class Consumer implements Client, ChainListener {
 		this.is_muted = true;
 	}
 
-/* MMT_DIRECTORY domain.
+/* MMT_DIRECTORY domain.  Request RDM dictionaries, RWFFld and RWFEnum, from first available service.
  */
 	private void OnDirectoryResponse (OMMMsg msg) {
 		LOG.trace ("OnDirectoryResponse: {}", msg);
 //GenericOMMParser.parse (msg);
-/* RFA 7.5.1.L1 raises invalid exception for Elektron Edge directory response. */
-//		final RDMDirectoryResponse response = new RDMDirectoryResponse (msg);
-/*
-		if (response.hasPayload()) {
-			final RDMDirectoryResponsePayload payload = response.getPayload();
-			if (payload.hasServiceList()) {
-				Iterator<Service> it = payload.getServiceList().iterator();
-				while (it.hasNext()) {
-					final Service service = it.next();
-					LOG.trace ("Service: {}", service.getServiceName());
-				}
 
-				this.pending_directory = false;
+		if (!this.pending_directory)
+			return;
+
+/* RFA 7.5.1.L1 raises invalid exception for Elektron Edge directory response due to hard coded capability validation. */
+		final RDMDirectoryResponse response = new RDMDirectoryResponse (msg);
+		if (!response.hasPayload()) {
+			LOG.trace ("Ignoring directory response due to no payload.");
+			return;
+		}
+
+		final RDMDirectoryResponsePayload payload = response.getPayload();
+		if (!payload.hasServiceList()) {
+			LOG.trace ("Ignoring directory response due to no service list.");
+			return;
+		}
+
+		String dictionary_service = null;
+		for (Service service : payload.getServiceList()) {
+			if (!service.hasServiceName()) {
+				LOG.trace ("Ignoring listed service due to empty name.");
+				continue;
 			}
-		} */
-
-/* WORKAROUND: request each listed "used" dictionaries, request if also a "provided" dictionary.
- */
-		if ((OMMMsg.MsgType.REFRESH_RESP == msg.getMsgType()
-			|| OMMMsg.MsgType.UPDATE_RESP == msg.getMsgType())
-/* check for payload */
-			&& OMMTypes.NO_DATA != msg.getDataType())
-		{
-			final OMMMap map = (OMMMap)msg.getPayload();
-			for (Iterator<?> it = map.iterator(); it.hasNext();) {
-				final OMMMapEntry map_entry = (OMMMapEntry)it.next();
-				final OMMData map_key = map_entry.getKey();
-				if (OMMTypes.FILTER_LIST != map_entry.getDataType()
-					|| OMMTypes.ASCII_STRING != map_key.getType())
-				{
-					LOG.trace ("OMM map entry not a filter list.");
-					continue;
-				}
-				final String service_name = ((OMMDataBuffer)map_key).toString();
-				final OMMFilterList filter_list = (OMMFilterList)map_entry.getData();
-/* extract out INFO filter */
-				OMMFilterEntry info_filter = null;
-				for (Iterator<?> filter = filter_list.iterator(); filter.hasNext();) {
-					OMMFilterEntry filter_entry = (OMMFilterEntry)filter.next();
-					if (filter_entry.getFilterId() == RDMService.FilterId.INFO) {
-						info_filter = filter_entry;
+			if (!service.hasAction()) {
+				LOG.trace ("{}: Ignoring service due to no map action {ADD|UPDATE|DELETE}.", service.getServiceName());
+				continue;
+			}
+			if (RDMDirectory.ServiceAction.DELETE == service.getAction()) {
+				LOG.trace ("{}: Ignoring service being deleted.", service.getServiceName());
+				continue;
+			}
+			if (!service.hasStateFilter()) {
+				LOG.trace ("{}: Ignoring service with no state filter as service may be unavailable.", service.getServiceName());
+				continue;
+			}
+			final Service.StateFilter state_filter = service.getStateFilter();
+			if (state_filter.hasServiceUp()) {
+				if (state_filter.getServiceUp()) {
+					if (state_filter.getAcceptingRequests()) {
+						dictionary_service = service.getServiceName();
 						break;
+					} else {
+						LOG.trace ("{}: Ignoring service as directory indicates it is not accepting requests.", service.getServiceName());
+						continue;
 					}
-				}
-				if (null == info_filter) {
-					LOG.trace ("{}: OMM filter list contains no INFO filter.", service_name);
+				} else {
+					LOG.trace ("{}: Ignoring service marked as not-up.", service.getServiceName());
 					continue;
 				}
-				LOG.trace ("{}: OMM filter list contains INFO filter.", service_name);
-				if (null == info_filter || OMMTypes.ELEMENT_LIST != info_filter.getDataType()) {
-					LOG.trace ("{}: INFO filter is not an OMM element list.", service_name);
-					continue;
-				}
-				final OMMElementList element_list = (OMMElementList)info_filter.getData();
-				final Set<String> provided = Sets.newHashSet();
-				for (Iterator<?> jt = element_list.iterator(); jt.hasNext();) {
-					final OMMElementEntry element_entry = (OMMElementEntry)jt.next();
-					final OMMData element_data = element_entry.getData();
-					if (element_entry.getName().equals (com.reuters.rfa.rdm.RDMService.Info.DictionariesProvided)) {
-						LOG.trace ("{}: Found \"DictionariesProvided\" entry.", service_name);
-						if (OMMTypes.ARRAY != element_data.getType()) {
-							LOG.trace ("{}: \"DictionariesProvided\" not an OMM array.", service_name);
-							continue;
-						}
-						final OMMArray array = (OMMArray)element_data;
-						Iterator<?> kt = array.iterator();
-						while (kt.hasNext()) {
-							final OMMEntry array_entry = (OMMEntry)kt.next();
-							final String dictionary_name = array_entry.getData().toString();
-							LOG.trace ("{}: Provided dictionary: \"{}\"", service_name, dictionary_name);
-							provided.add (dictionary_name);
-						}
-					}
-					else if (element_entry.getName().equals (com.reuters.rfa.rdm.RDMService.Info.DictionariesUsed))
-					{
-						LOG.trace ("{}: Found \"DictionariesUsed\" entry.", service_name);
-						if (OMMTypes.ARRAY != element_data.getType()) {
-							LOG.trace ("{}: \"DictionariesUsed\" not an OMM array.", service_name);
-							continue;
-						}
-						final OMMArray array = (OMMArray)element_data;
-						Iterator<?> kt = array.iterator();
-						while (kt.hasNext()) {
-							final OMMEntry array_entry = (OMMEntry)kt.next();
-							final String dictionary_name = array_entry.getData().toString();
-							LOG.trace ("{}: Used dictionary: \"{}\"", service_name, dictionary_name);
-							if (provided.contains (dictionary_name)
-								&& !this.dictionary_handle.containsKey (dictionary_name))
-							{
-								this.sendDictionaryRequest (service_name, dictionary_name);
-							}
-						}
-					}
-				}
+			} else {
+				LOG.trace ("{}: Ignoring service without service state indicator.", service.getServiceName());
+				continue;
 			}
+		}
+
+		if (Strings.isNullOrEmpty (dictionary_service)) {
+			LOG.trace ("No service available to accept dictionary requests, waiting for service change in directory update.");
+			return;
+		}
+
+/* Hard code to RDM dictionary names */
+		if (!this.dictionary_handle.containsKey ("RWFFld")) {
+			this.sendDictionaryRequest (dictionary_service, "RWFFld");
+		}
+
+		if (!this.dictionary_handle.containsKey ("RWFEnum")) {
+			this.sendDictionaryRequest (dictionary_service, "RWFEnum");
+		}
 
 /* directory received. */
-			this.pending_directory = false;
-		}
+		this.pending_directory = false;
 	}
 
 /* MMT_DICTIONARY domain.
@@ -1287,6 +1259,11 @@ public class Consumer implements Client, ChainListener {
 		}
 	}
 
+/* In RMDS land we may have MarketFeed or SASS dictionaries dependent upon the infrastructure
+ * and providers.  Dynamically support both at runtime by requesting all available dictionaries.
+ * Note state will stall if a dictionary is advertised but not available.  There is no support
+ * for different versions of the same dictionary across different providers.
+ */
 	private void OnMarketDataSvcEvent (MarketDataSvcEvent event) {
 		LOG.trace ("OnMarketDataSvcEvent: {}", event);
 /* Wait for any service to be up instead of one named service */
