@@ -11,6 +11,7 @@ import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.MarkerManager;
 import org.joda.time.DateTime;
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Maps;
@@ -630,7 +631,7 @@ public class Consumer implements Client, ChainListener {
  * (Section 2.2) response message of a Dictionary is received.
  */
 	private void sendDictionaryRequest (String service_name, String dictionary_name) {
-		LOG.trace ("Sending dictionary request for \"{}\".", dictionary_name);
+		LOG.trace ("Sending dictionary request for \"{}\" from service \"{}\".", dictionary_name, service_name);
 		RDMDictionaryRequest request = new RDMDictionaryRequest();
 		RDMDictionaryRequestAttrib attribInfo = new RDMDictionaryRequestAttrib();
 
@@ -834,8 +835,7 @@ public class Consumer implements Client, ChainListener {
 			}
 		} */
 
-/* WORKAROUND: request each listed "used" dictionaries.  Assumes that the provider
- * or connected infrastructure will provide the dictionaries.
+/* WORKAROUND: request each listed "used" dictionaries, request if also a "provided" dictionary.
  */
 		if ((OMMMsg.MsgType.REFRESH_RESP == msg.getMsgType()
 			|| OMMMsg.MsgType.UPDATE_RESP == msg.getMsgType())
@@ -864,33 +864,53 @@ public class Consumer implements Client, ChainListener {
 					}
 				}
 				if (null == info_filter) {
-					LOG.trace ("OMM filter list contains no INFO filter.");
+					LOG.trace ("{}: OMM filter list contains no INFO filter.", service_name);
 					continue;
 				}
-				LOG.trace ("OMM filter list contains INFO filter.");
+				LOG.trace ("{}: OMM filter list contains INFO filter.", service_name);
 				if (null == info_filter || OMMTypes.ELEMENT_LIST != info_filter.getDataType()) {
-					LOG.trace ("INFO filter is not an OMM element list.");
+					LOG.trace ("{}: INFO filter is not an OMM element list.", service_name);
 					continue;
 				}
 				final OMMElementList element_list = (OMMElementList)info_filter.getData();
+				final Set<String> provided = Sets.newHashSet();
 				for (Iterator<?> jt = element_list.iterator(); jt.hasNext();) {
 					final OMMElementEntry element_entry = (OMMElementEntry)jt.next();
 					final OMMData element_data = element_entry.getData();
-					if (!element_entry.getName().equals (com.reuters.rfa.rdm.RDMService.Info.DictionariesUsed))
-						continue;
-					LOG.trace ("Found DictionariesUsed entry.");
-					if (OMMTypes.ARRAY != element_data.getType()) {
-						LOG.trace ("DictionariesUsed not an OMM array.");
-						continue;
+					if (element_entry.getName().equals (com.reuters.rfa.rdm.RDMService.Info.DictionariesProvided)) {
+						LOG.trace ("{}: Found \"DictionariesProvided\" entry.", service_name);
+						if (OMMTypes.ARRAY != element_data.getType()) {
+							LOG.trace ("{}: \"DictionariesProvided\" not an OMM array.", service_name);
+							continue;
+						}
+						final OMMArray array = (OMMArray)element_data;
+						Iterator<?> kt = array.iterator();
+						while (kt.hasNext()) {
+							final OMMEntry array_entry = (OMMEntry)kt.next();
+							final String dictionary_name = array_entry.getData().toString();
+							LOG.trace ("{}: Provided dictionary: \"{}\"", service_name, dictionary_name);
+							provided.add (dictionary_name);
+						}
 					}
-					final OMMArray array = (OMMArray)element_data;
-					Iterator<?> kt = array.iterator();
-					while (kt.hasNext()) {
-						final OMMEntry array_entry = (OMMEntry)kt.next();
-						final String dictionary_name = array_entry.getData().toString();
-						if (!this.dictionary_handle.containsKey (dictionary_name))
-							this.sendDictionaryRequest (service_name, dictionary_name);
-						LOG.trace ("Used dictionary: {}", dictionary_name);
+					else if (element_entry.getName().equals (com.reuters.rfa.rdm.RDMService.Info.DictionariesUsed))
+					{
+						LOG.trace ("{}: Found \"DictionariesUsed\" entry.", service_name);
+						if (OMMTypes.ARRAY != element_data.getType()) {
+							LOG.trace ("{}: \"DictionariesUsed\" not an OMM array.", service_name);
+							continue;
+						}
+						final OMMArray array = (OMMArray)element_data;
+						Iterator<?> kt = array.iterator();
+						while (kt.hasNext()) {
+							final OMMEntry array_entry = (OMMEntry)kt.next();
+							final String dictionary_name = array_entry.getData().toString();
+							LOG.trace ("{}: Used dictionary: \"{}\"", service_name, dictionary_name);
+							if (provided.contains (dictionary_name)
+								&& !this.dictionary_handle.containsKey (dictionary_name))
+							{
+								this.sendDictionaryRequest (service_name, dictionary_name);
+							}
+						}
 					}
 				}
 			}
@@ -913,12 +933,12 @@ public class Consumer implements Client, ChainListener {
 		LOG.trace ("OnDictionaryResponse: {}", msg);
 		final RDMDictionaryResponse response = new RDMDictionaryResponse (msg);
 /* Receiving dictionary */
+		if (response.hasAttrib()) {
+			LOG.trace ("Dictionary {}: {}", response.getMessageType(), response.getAttrib().getDictionaryName());
+		}
 		if (response.getMessageType() == RDMDictionaryResponse.MessageType.REFRESH_RESP
 			&& response.hasPayload() && null != response.getPayload())
 		{
-			if (response.hasAttrib()) {
-				LOG.trace ("Dictionary: {}", response.getAttrib().getDictionaryName());
-			}
 			this.rdm_dictionary.load (response.getPayload(), handle);
 		}
 
@@ -932,13 +952,24 @@ public class Consumer implements Client, ChainListener {
 			LOG.trace ("Dictionary complete.");
 /* Check dictionary version */
 			FieldDictionary field_dictionary = this.rdm_dictionary.getFieldDictionary();
+			final String dictionary_version = field_dictionary.getFieldProperty ("Version");
 			if (RDMDictionary.DictionaryType.RWFFLD == dictionary_type)
 			{
-				LOG.trace ("RDMFieldDictionary version: {}", field_dictionary.getFieldProperty ("Version"));
+				LOG.trace ("RDM field definitions version: {}", dictionary_version);
 			}
 			else if (RDMDictionary.DictionaryType.RWFENUM == dictionary_type)
 			{
-				LOG.trace ("enumtype.def version: {}", field_dictionary.getEnumProperty ("Version"));
+/* Version number for enumerated types is optional */
+				final String matching_field_version = field_dictionary.getEnumProperty ("RT_Version");
+				final String enumtype_version = field_dictionary.getEnumProperty ("DT_Version");
+				if (Strings.isNullOrEmpty (enumtype_version)) {
+					LOG.trace ("Unreported version for enumerated type dictionary.");
+				} else if (!Strings.isNullOrEmpty (matching_field_version)
+					&& !matching_field_version.equals (dictionary_version)) {
+					LOG.error ("Enumerated type dictionary field dictionary version {} conflicts with provided version {}.", matching_field_version, dictionary_version);
+				} else {
+					LOG.trace ("RDM enumerated type version: {} (RT: {})", enumtype_version, matching_field_version);
+				}
 			}
 /* Notify RFA example helper of dictionary if using to dump message content. */
 //			GenericOMMParser.initializeDictionary (field_dictionary);
