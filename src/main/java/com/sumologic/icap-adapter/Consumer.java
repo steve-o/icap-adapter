@@ -990,37 +990,7 @@ public class Consumer implements Client, ChainListener {
 		}
 	}
 
-	private void OnMarketDataItemEvent (MarketDataItemEvent event) {
-		final DateTime dt = new DateTime();
-		final ItemStream item_stream = (ItemStream)event.getClosure();
-		LOG.trace ("OnMarketDataItemEvent: {}", event);
-		if (event.isEventStreamClosed()) {
-			LOG.trace ("Subscription handle for \"{}\" is closed.", event.getItemName());
-			item_stream.clearItemHandle();
-		}
-/* strings in switch are not supported in -source 1.6 */
-		if (MarketDataItemEvent.UPDATE == event.getMarketDataMsgType()) {
-/* fall through */
-		}
-/* use refresh to capture last value only */
-		else if (MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()
-			|| MarketDataItemEvent.UNSOLICITED_IMAGE == event.getMarketDataMsgType())
-		{
-			this.updateLastValueCache (event, dt);
-			return;
-		}
-		else if (MarketDataItemEvent.STATUS == event.getMarketDataMsgType()) {
-			LOG.trace ("Status: {}", event);
-
-/* MARKET_DATA_ITEM_EVENT, service = ELEKTRON_EDGE, item = RBK,
- * MarketDataMessageType = STATUS, MarketDataItemStatus = { state: CLOSED,
- * code: NONE, text: "The record could not be found"}, data = NULL
- */
-
-/* Item stream recovered. */
-			if (MarketDataItemStatus.OK == event.getStatus().getState())
-				return;
-
+	private void OnMarketDataItemStatus (DateTime dt, String service_name, String item_name, MarketDataItemStatus status, boolean isEventStreamClosed) {
 /* ICAP error output here */
 /* Rewrite to RSSL/OMM semantics, (Stream,Data,Code)
  *
@@ -1040,33 +1010,80 @@ public class Consumer implements Client, ChainListener {
  * 	     -  The item is not open on the provider, and the application should close this
  * 	        stream.
  */
-			String stream_state = "OPEN", data_state = "NO_CHANGE";
-			if (event.isEventStreamClosed()
-				|| MarketDataItemStatus.CLOSED == event.getStatus().getState())
-			{
-				stream_state = "CLOSED";
-				data_state = "SUSPECT";
-			}
-			else if (MarketDataItemStatus.CLOSED_RECOVER == event.getStatus().getState())
-			{
-				stream_state = "CLOSED_RECOVER";
-				data_state = "SUSPECT";
-			}
-			else if (MarketDataItemStatus.STALE == event.getStatus().getState())
-			{
-				data_state = "SUSPECT";
-			}
+		String stream_state = "OPEN", data_state = "NO_CHANGE";
+		if (isEventStreamClosed || MarketDataItemStatus.CLOSED == status.getState())
+		{
+			stream_state = "CLOSED";
+			data_state = "SUSPECT";
+		}
+		else if (MarketDataItemStatus.CLOSED_RECOVER == status.getState())
+		{
+			stream_state = "CLOSED_RECOVER";
+			data_state = "SUSPECT";
+		}
+		else if (MarketDataItemStatus.STALE == status.getState())
+		{
+			data_state = "SUSPECT";
+		}
+		else if (MarketDataItemStatus.OK == status.getState())
+		{
+			data_state = "OK";
+		}
 
 /* Defer to GSON to escape status text. */
-			LogMessage msg = new LogMessage (dt.toString(),
-					"STATUS",
+		LogMessage msg = new LogMessage (dt.toString(),
+				"STATUS",
+				service_name,
+				item_name,
+				stream_state,
+				data_state,
+				status.getStatusCode().toString(),
+				status.getStatusText());
+		LOG.info (ICAP_MARKER, this.gson.toJson (msg));
+	}
+
+	private void OnMarketDataItemEvent (MarketDataItemEvent event) {
+		final DateTime dt = new DateTime();
+		final ItemStream item_stream = (ItemStream)event.getClosure();
+		LOG.trace ("OnMarketDataItemEvent: {}", event);
+		if (event.isEventStreamClosed()) {
+			LOG.trace ("Subscription handle for \"{}\" is closed.", event.getItemName());
+			item_stream.clearItemHandle();
+		}
+/* strings in switch are not supported in -source 1.6 */
+		if (MarketDataItemEvent.UPDATE == event.getMarketDataMsgType()) {
+/* fall through */
+		}
+/* use refresh to capture last value only */
+		else if (MarketDataItemEvent.IMAGE == event.getMarketDataMsgType()
+			|| MarketDataItemEvent.UNSOLICITED_IMAGE == event.getMarketDataMsgType())
+		{
+			this.updateLastValueCache (dt, event);
+/* convert to STATUS event */
+			this.OnMarketDataItemStatus (dt,
 					item_stream.getServiceName(),
 					item_stream.getItemName(),
-					stream_state,
-					data_state,
-					event.getStatus().getStatusCode().toString(),
-					event.getStatus().getStatusText());
-			LOG.info (ICAP_MARKER, this.gson.toJson (msg));
+					event.getStatus(),
+					event.isEventStreamClosed());
+			return;
+		}
+		else if (MarketDataItemEvent.STATUS == event.getMarketDataMsgType()) {
+			LOG.trace ("Status: {}", event);
+
+/* MARKET_DATA_ITEM_EVENT, service = ELEKTRON_EDGE, item = RBK,
+ * MarketDataMessageType = STATUS, MarketDataItemStatus = { state: CLOSED,
+ * code: NONE, text: "The record could not be found"}, data = NULL
+ */
+
+/* Item stream recovered. */
+			if (MarketDataItemStatus.OK == event.getStatus().getState())
+				return;
+
+			this.OnMarketDataItemStatus (dt,
+					item_stream.getServiceName(),
+					item_stream.getItemName(),
+					event.getStatus(),
+					event.isEventStreamClosed());
 			return;
 		}
 		else if (MarketDataItemEvent.CORRECTION == event.getMarketDataMsgType()) {
@@ -1220,7 +1237,7 @@ public class Consumer implements Client, ChainListener {
 		}
 	}
 
-	private void updateLastValueCache (MarketDataItemEvent event, DateTime dt) {
+	private void updateLastValueCache (DateTime dt, MarketDataItemEvent event) {
 		final ItemStream item_stream = (ItemStream)event.getClosure();
 /* silently ignore */
 		if (MarketDataEnums.DataFormat.MARKETFEED != event.getDataFormat())
