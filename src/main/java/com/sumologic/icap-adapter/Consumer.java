@@ -162,6 +162,8 @@ public class Consumer implements Client, ChainListener {
 	private boolean pending_dictionary;
 
 	private static final boolean UNSUBSCRIBE_ON_SHUTDOWN = false;
+	private static final boolean DO_NOT_CACHE_ZERO_VALUE = true;
+	private static final boolean DO_NOT_CACHE_BLANK_VALUE = true;
 
 	private static final int OMM_PAYLOAD_SIZE       = 5000;
 	private static final int GC_DELAY_MS		= 15000;
@@ -1173,21 +1175,17 @@ public class Consumer implements Client, ChainListener {
 					TibMsg.TIBMSG_OK == status;
 					status = this.field.Next())
 				{
-					if (view.contains (field.MfeedFid())) {
-						final String field_data = this.field.StringData();
+					if (view.contains (field.MfeedFid()))
+					{
+						final boolean is_blank = (0 == this.field.RawSize());
 						final String ripple_field_name = item_stream.getRippleField (field.MfeedFid());
 						final String[] ripple_field_data = item_stream.getLastValue (field.MfeedFid());
 						if (!this.field_set.isEmpty()) this.sb.append (',');
-						switch (this.field.Type()) {
-/* values that can be represented raw in JSON form */
-						case TibMsg.TIBMSG_BOOLEAN:
-						case TibMsg.TIBMSG_INT:
-						case TibMsg.TIBMSG_REAL:
-						case TibMsg.TIBMSG_UINT:
+						if (is_blank) {
 							this.sb.append ('{')
 								.append ('\"').append (this.field.Name()).append ('\"')
-								.append (':')
-								.append (field_data)
+								.append (',')
+								.append ("null")
 								.append (',')
 								.append ('\"').append (ripple_field_name).append ('\"')
 								.append (':')
@@ -1197,25 +1195,55 @@ public class Consumer implements Client, ChainListener {
 								.append (':')
 								.append ('\"').append (ripple_field_data[1]).append ('\"')
 								.append ('}');
-							break;
-						default:
-							this.sb.append ('{')
-								.append ('\"').append (this.field.Name()).append ('\"')
-								.append (':')
-								.append ('\"').append (field_data).append ('\"')
-								.append (',')
-								.append ('\"').append (ripple_field_name).append ('\"')
-								.append (':')
-								.append ('\"').append (ripple_field_data[0]).append ('\"')
-								.append (',')
-								.append ('\"').append (ripple_field_name).append ("_TS\"")
-								.append (':')
-								.append ('\"').append (ripple_field_data[1]).append ('\"')
-								.append ('}');
-							break;
+/* force stored value to be null */
+							if (!DO_NOT_CACHE_BLANK_VALUE) {
+								item_stream.setLastValue (field.MfeedFid(), new String[]{ null, dt_as_string });
+							}
+						} else {
+							boolean is_zero = false;
+							final String field_data = this.field.StringData();
+							switch (this.field.Type()) {
+/* values that can be represented raw in JSON form */
+							case TibMsg.TIBMSG_INT:
+							case TibMsg.TIBMSG_REAL:
+							case TibMsg.TIBMSG_UINT:
+/* IEEE 754 ensures +0.0 == -0.0 */
+								is_zero = (0.0 == this.field.DoubleData());
+								this.sb.append ('{')
+									.append ('\"').append (this.field.Name()).append ('\"')
+									.append (':')
+									.append (field_data)
+									.append (',')
+									.append ('\"').append (ripple_field_name).append ('\"')
+									.append (':')
+									.append (ripple_field_data[0])
+									.append (',')
+									.append ('\"').append (ripple_field_name).append ("_TS\"")
+									.append (':')
+									.append ('\"').append (ripple_field_data[1]).append ('\"')
+									.append ('}');
+								break;
+/* empty strings, timestamps are left as is */
+							default:
+								this.sb.append ('{')
+									.append ('\"').append (this.field.Name()).append ('\"')
+									.append (':')
+									.append ('\"').append (field_data).append ('\"')
+									.append (',')
+									.append ('\"').append (ripple_field_name).append ('\"')
+									.append (':')
+									.append ('\"').append (ripple_field_data[0]).append ('\"')
+									.append (',')
+									.append ('\"').append (ripple_field_name).append ("_TS\"")
+									.append (':')
+									.append ('\"').append (ripple_field_data[1]).append ('\"')
+									.append ('}');
+								break;
+							}
+							if (!(DO_NOT_CACHE_ZERO_VALUE && is_zero)) {
+								item_stream.setLastValue (field.MfeedFid(), new String[]{ field_data, dt_as_string });
+							}
 						}
-/* store last value */
-						item_stream.setLastValue (field.MfeedFid(), new String[]{ field_data, dt_as_string });
 						this.field_set.add (this.field.MfeedFid());
 						if (view.size() == this.field_set.size()) break;
 					}
@@ -1257,6 +1285,7 @@ public class Consumer implements Client, ChainListener {
 					status = this.field.Next())
 				{
 					if (view.contains (field.MfeedFid())) {
+/* always store last value */
 						item_stream.setLastValue (field.MfeedFid(), new String[]{ this.field.StringData(), dt_as_string });
 						this.field_set.add (this.field.MfeedFid());
 						if (view.size() == this.field_set.size()) break;
