@@ -128,6 +128,10 @@ public class Consumer implements Client, ChainListener {
 	private Handle login_handle;
 	private Handle directory_handle;
 
+/* Resubscription management via timer */
+	private Handle resubscription_handle;
+	private SubscriptionManager subscription_manager;
+
 	private class FlaggedHandle {
 		private Handle handle;
 		private boolean flag;
@@ -167,6 +171,7 @@ public class Consumer implements Client, ChainListener {
 
 	private static final int OMM_PAYLOAD_SIZE       = 5000;
 	private static final int GC_DELAY_MS		= 15000;
+	private static final int RESUBSCRIPTION_MS	= 180000;
 
 	private static final String RSSL_PROTOCOL       = "rssl";
 	private static final String SSLED_PROTOCOL      = "ssled";
@@ -180,6 +185,35 @@ public class Consumer implements Client, ChainListener {
 		this.is_muted = true;
 		this.pending_directory = true;
 		this.pending_dictionary = true;
+	}
+
+	private class SubscriptionManager implements Client {
+		private final Consumer consumer;
+
+		public SubscriptionManager (Consumer consumer) {
+			this.consumer = consumer;
+		}
+
+		@Override
+		public void processEvent (Event event) {
+			LOG.trace (event);
+			switch (event.getType()) {
+			case Event.TIMER_EVENT:
+				this.OnTimerEvent (event);
+				break;
+
+			default:
+				LOG.trace ("Uncaught: {}", event);
+				break;
+			}
+		}
+
+		private void OnTimerEvent (Event event) {
+			LOG.trace ("Resubscription event ...");
+			if (null != this.consumer) {
+				this.consumer.resubscribe();
+			}
+		}
 	}
 
 	public void init() throws Exception {
@@ -258,9 +292,23 @@ public class Consumer implements Client, ChainListener {
 
 		this.directory = new LinkedHashMap<String, ItemStream>();
 		this.dictionary_handle = new TreeMap<String, FlaggedHandle>();
+
+/* Resubsription manager */
+		if (RESUBSCRIPTION_MS > 0) {
+			final TimerIntSpec timer = new TimerIntSpec();
+			timer.setDelay (RESUBSCRIPTION_MS);
+			timer.setRepeating (true);
+			if (this.config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL)) {
+				this.subscription_manager = new SubscriptionManager (this);
+				this.resubscription_handle = this.market_data_subscriber.registerClient (this.event_queue, timer, this.subscription_manager, null);
+			}
+		}
 	}
 
 	public void clear() {
+		if (null != this.resubscription_handle) {
+			this.resubscription_handle = null;
+		}
 		if (null != this.market_data_subscriber) {
 			LOG.trace ("Closing MarketDataSubscriber.");
 			if (UNSUBSCRIBE_ON_SHUTDOWN) {
@@ -367,7 +415,7 @@ public class Consumer implements Client, ChainListener {
 		final ImmutableSortedSet<String> view_by_name = ImmutableSortedSet.copyOf (instrument.getFields());
 		item_stream.setViewByName (view_by_name);
 
-		if (!this.is_muted) {
+		if (!this.pending_dictionary) {
 			if (this.config.getProtocol().equalsIgnoreCase (RSSL_PROTOCOL)) {
 				this.sendItemRequest (item_stream);
 			}
@@ -449,6 +497,9 @@ public class Consumer implements Client, ChainListener {
 	}
 
 	public void resubscribe() {
+/* Cannot decode responses so do not allow wire subscriptions until dictionary is present */
+		if (this.pending_dictionary)
+			return;
 		if (this.config.getProtocol().equalsIgnoreCase (RSSL_PROTOCOL))
 		{
 			if (null == this.omm_consumer) {
@@ -595,7 +646,8 @@ public class Consumer implements Client, ChainListener {
 
 /* Reset status */
 		this.pending_directory = true;
-		this.pending_dictionary = true;
+// Maintain current status of dictionary instead of interrupting existing consumers.
+//		this.pending_dictionary = true;
 	}
 
 /* Make a directory request to see if we can ask for a dictionary.
@@ -822,6 +874,7 @@ public class Consumer implements Client, ChainListener {
 		LOG.trace ("OnDirectoryResponse: {}", msg);
 //GenericOMMParser.parse (msg);
 
+// We only desire a single directory response with UP status to request dictionaries, ignore all other updates */
 		if (!this.pending_directory)
 			return;
 
@@ -893,7 +946,7 @@ public class Consumer implements Client, ChainListener {
 			this.sendDictionaryRequest (dictionary_service, "RWFEnum");
 		}
 
-/* directory received. */
+/* Directory received and processed, ignore all future updates. */
 		this.pending_directory = false;
 	}
 
@@ -950,8 +1003,8 @@ public class Consumer implements Client, ChainListener {
 			}
 			if (0 == pending_dictionaries) {
 				LOG.trace ("All used dictionaries loaded, resuming subscriptions.");
-				this.resubscribe();
 				this.pending_dictionary = false;
+				this.resubscribe();
 			} else {
 				LOG.trace ("Dictionaries pending: {}", pending_dictionaries);
 			}
@@ -1304,10 +1357,12 @@ public class Consumer implements Client, ChainListener {
  */
 	private void OnMarketDataSvcEvent (MarketDataSvcEvent event) {
 		LOG.trace ("OnMarketDataSvcEvent: {}", event);
+// We only desire a single directory response with UP status to request dictionaries, ignore all other updates */
+		if (!this.pending_directory)
+			return;
 /* Wait for any service to be up instead of one named service */
 		if (/* event.getServiceName().equals (this.config.getServiceName())
-			&& */ MarketDataSvcStatus.UP == event.getStatus().getState()
-			&& this.is_muted)
+			&& */ MarketDataSvcStatus.UP == event.getStatus().getState())
 		{
 /* start dictionary subscription */
 			final DataDictInfo[] dataDictInfo = event.getDataDictInfo();
@@ -1315,6 +1370,14 @@ public class Consumer implements Client, ChainListener {
 				if (!this.dictionary_handle.containsKey (dataDictInfo[i].getDictType().toString())) 
 					this.addDictionarySubscription (dataDictInfo[i]);
 			}
+
+			if (this.dictionary_handle.isEmpty()) {
+				LOG.trace ("No dictionary available to request, waiting for dictionary information in directory update.");
+				return;
+			}
+
+/* Directory received and processed, ignore all future updates. */
+			this.pending_directory = false;
 		}
 	}
 
@@ -1348,10 +1411,9 @@ public class Consumer implements Client, ChainListener {
 			if (0 == pending_dictionaries) {
 				LOG.trace ("All used dictionaries loaded, resuming subscriptions.");
 				this.appendix_a = this.createDictionaryMap();
-				this.is_muted = false;
 				Chains.ApplyFieldDictionary (this.appendix_a);
-				this.resubscribe();
 				this.pending_dictionary = false;
+				this.resubscribe();
 			} else {
 				LOG.trace ("Dictionaries pending: {}", pending_dictionaries);
 			}
