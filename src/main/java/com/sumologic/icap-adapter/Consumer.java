@@ -208,6 +208,11 @@ public class Consumer implements Client, ChainListener {
 			}
 		}
 
+/* All requests are throttled per The Session Layer Package Configuration thus
+ * no need to perform additional pacing at the application layer.  Default is
+ * to permit 200 outstanding requests at a time.  See throttleEnabled, and
+ * throttleType for interval based request batching.
+ */
 		private void OnTimerEvent (Event event) {
 			LOG.trace ("Resubscription event ...");
 			if (null != this.consumer) {
@@ -1141,6 +1146,9 @@ public class Consumer implements Client, ChainListener {
 					event.isEventStreamClosed());
 			return;
 		}
+/* Available in SSL if useMarketfeedUpdateType set True so that updates are inspected for
+ * underlying type, whether Correction (317) or a Closing Run (312).
+ */
 		else if (MarketDataItemEvent.CORRECTION == event.getMarketDataMsgType()) {
 			LOG.trace ("Ignoring correction.");
 			return;
@@ -1237,7 +1245,7 @@ public class Consumer implements Client, ChainListener {
 						if (is_blank) {
 							this.sb.append ('{')
 								.append ('\"').append (this.field.Name()).append ('\"')
-								.append (',')
+								.append (':')
 								.append ("null")
 								.append (',')
 								.append ('\"').append (ripple_field_name).append ('\"')
@@ -1357,7 +1365,7 @@ public class Consumer implements Client, ChainListener {
  */
 	private void OnMarketDataSvcEvent (MarketDataSvcEvent event) {
 		LOG.trace ("OnMarketDataSvcEvent: {}", event);
-// We only desire a single directory response with UP status to request dictionaries, ignore all other updates */
+/* We only desire a single directory response with UP status to request dictionaries, ignore all other updates */
 		if (!this.pending_directory)
 			return;
 /* Wait for any service to be up instead of one named service */
@@ -1375,9 +1383,6 @@ public class Consumer implements Client, ChainListener {
 				LOG.trace ("No dictionary available to request, waiting for dictionary information in directory update.");
 				return;
 			}
-
-/* Directory received and processed, ignore all future updates. */
-			this.pending_directory = false;
 		}
 	}
 

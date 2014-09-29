@@ -44,22 +44,23 @@ public class IcapAdapter {
 	private static Logger LOG = LogManager.getLogger (IcapAdapter.class.getName());
 	private static Logger RFA_LOG = LogManager.getLogger ("com.reuters.rfa");
 
-	private static final String RSSL_PROTOCOL	= "rssl";
-	private static final String SSLED_PROTOCOL	= "ssled";
+	private static final String RSSL_PROTOCOL		= "rssl";
+	private static final String SSLED_PROTOCOL		= "ssled";
 
-	private static final String SERVER_LIST_PARAM	= "server-list";
+	private static final String SERVER_LIST_PARAM		= "server-list";
 	private static final String APPLICATION_ID_PARAM	= "application-id";
-	private static final String INSTANCE_ID_PARAM	= "instance-id";
-	private static final String POSITION_PARAM	= "position";
+	private static final String INSTANCE_ID_PARAM		= "instance-id";
+	private static final String POSITION_PARAM		= "position";
+	private static final String PING_INTERVAL_PARAM		= "ping-interval";
 
-	private static final String SESSION_OPTION	= "session";
-	private static final String SYMBOL_PATH_OPTION	= "symbol-path";
-	private static final String HELP_OPTION		= "help";
-	private static final String VERSION_OPTION	= "version";
+	private static final String SESSION_OPTION		= "session";
+	private static final String SYMBOL_PATH_OPTION		= "symbol-path";
+	private static final String HELP_OPTION			= "help";
+	private static final String VERSION_OPTION		= "version";
 
-	private static final String SESSION_NAME	= "Session";
-	private static final String CONNECTION_NAME	= "Connection";
-	private static final String CONSUMER_NAME	= "Consumer";
+	private static final String SESSION_NAME		= "Session";
+	private static final String CONNECTION_NAME		= "Connection";
+	private static final String CONSUMER_NAME		= "Consumer";
 
 	private static Options buildOptions() {
 		Options opts = new Options();
@@ -149,6 +150,8 @@ public class IcapAdapter {
 /* -1 if the port is undefined */
 				if (-1 != parsed.getPort()) 
 					session_config.setDefaultPort (Integer.toString (parsed.getPort()));
+				if (query.containsKey (PING_INTERVAL_PARAM))
+					session_config.setPingInterval (query.get (PING_INTERVAL_PARAM));
 /* Catch default URL of host/ as empty */
 				if (!Strings.isNullOrEmpty (parsed.getPath())
 					&& parsed.getPath().length() > 1)

@@ -25,6 +25,9 @@ public class SessionConfig {
 //  Default TREP-RT R/SSL port, e.g. 14002, 14003, 8101.
 	private Optional<String> default_port;
 
+//  Maximum ping interval for negotiation with provider
+	private Optional<String> ping_interval;
+
 //  TREP-RT service name, e.g. IDN_RDF.
 	private Optional<String> service_name;
 
@@ -60,6 +63,7 @@ public class SessionConfig {
 		this.protocol = protocol;
 		this.servers = servers;
 		this.default_port = Optional.absent();
+		this.ping_interval = Optional.absent();
 		this.service_name = Optional.absent();
 		this.application_id = Optional.absent();
 		this.instance_id = Optional.absent();
@@ -98,6 +102,18 @@ public class SessionConfig {
 
 	public void setDefaultPort (String default_port) {
 		this.default_port = Optional.of (default_port);
+	}
+
+	public boolean hasPingInterval() {
+		return this.ping_interval.isPresent();
+	}
+
+	public String getPingInterval() {
+		return this.ping_interval.get();
+	}
+
+	public void setPingInterval (String ping_interval) {
+		this.ping_interval = Optional.of (ping_interval);
 	}
 
 	public boolean hasServiceName() {

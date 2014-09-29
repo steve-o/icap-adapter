@@ -72,6 +72,12 @@ public class Rfa {
 				value = session_config.getDefaultPort();
 				staging.addVariable (fixRfaStringPath (name), value);
 			}
+/* Protocol ping interval */
+			if (session_config.hasPingInterval()) {
+				name = "/Connections/" + connection_name + "/pingInterval";
+				value = session_config.getPingInterval();
+				staging.addVariable (fixRfaStringPath (name), value);
+			}
 
 /* Communications protocol */
 			name = "/Connections/" + connection_name + "/connectionType";
