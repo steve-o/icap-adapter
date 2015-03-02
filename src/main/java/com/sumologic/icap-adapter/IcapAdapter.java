@@ -306,6 +306,20 @@ public class IcapAdapter {
 
 	public volatile boolean is_shutdown = false;
 
+	private void drainqueue() {
+		LOG.trace ("Draining event queue.");
+		int count = 0;
+		try {
+			while (this.event_queue.dispatch (Dispatchable.NO_WAIT) > 0) { ++count; }
+			LOG.trace ("Queue contained {} events.", count);
+		} catch (DeactivatedException e) {
+/* ignore on empty queue */
+			if (count > 0) LOG.catching (e);
+		} catch (Exception e) {
+			LOG.catching (e);
+		}
+	}
+
 	private void mainloop() {
 		try {
 			while (this.event_queue.isActive()) {
@@ -314,17 +328,21 @@ public class IcapAdapter {
 		} catch (DeactivatedException e) {
 /* manual shutdown */
 			LOG.trace ("Mainloop deactivated.");
-			return;
-		} catch (Exception e) {
-			LOG.catching (e);
+		} catch (Throwable t) {
+			LOG.catching (t);
+		} finally {
+			if (!this.event_queue.isActive()) this.event_queue.deactivate();
+			this.drainqueue();
 		}
 	}
 
 	private void clear() {
 /* Prevent new events being generated whilst shutting down. */
-		if (null != this.event_queue && this.event_queue.isActive())
+		if (null != this.event_queue && this.event_queue.isActive()) {
 			LOG.trace ("Deactivating EventQueue.");
 			this.event_queue.deactivate();
+			this.drainqueue();
+		}
 
 		if (null != this.consumer) {
 			LOG.trace ("Closing Consumer.");
