@@ -51,6 +51,7 @@ public class IcapAdapter {
 	private static final String APPLICATION_ID_PARAM	= "application-id";
 	private static final String INSTANCE_ID_PARAM		= "instance-id";
 	private static final String POSITION_PARAM		= "position";
+	private static final String DICTIONARY_PARAM		= "dictionary";
 	private static final String PING_INTERVAL_PARAM		= "ping-interval";
 
 	private static final String SESSION_OPTION		= "session";
@@ -164,6 +165,16 @@ public class IcapAdapter {
 					session_config.setInstanceId (query.get (INSTANCE_ID_PARAM));
 				if (query.containsKey (POSITION_PARAM))
 					session_config.setPosition (query.get (POSITION_PARAM));
+				if (query.containsKey (DICTIONARY_PARAM)) {
+					Iterator<String> it = Splitter.on (',')
+									.trimResults()
+									.limit (2)
+									.split (query.get (DICTIONARY_PARAM)).iterator();
+					if (it.hasNext())
+						session_config.setFieldDictionary (it.next());
+					if (it.hasNext())
+						session_config.setEnumDictionary (it.next());
+				}
 
 				LOG.debug ("Session evaluation: {}", session_config.toString());
 				session_configs.add (session_config);

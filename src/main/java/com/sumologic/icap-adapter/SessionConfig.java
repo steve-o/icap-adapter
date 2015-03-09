@@ -56,6 +56,11 @@ public class SessionConfig {
  */
 	private Optional<String> position;
 
+/* Local dictionary files to override source delivered version.
+ */
+	private Optional<String> field_dictionary;
+	private Optional<String> enum_dictionary;
+
 	public SessionConfig (String session_name, String connection_name, String consumer_name, String protocol, String[] servers) {
 		this.session_name = session_name;
 		this.connection_name = connection_name;
@@ -69,6 +74,8 @@ public class SessionConfig {
 		this.instance_id = Optional.absent();
 		this.user_name = Optional.absent();
 		this.position = Optional.absent();
+		this.field_dictionary = Optional.absent();
+		this.enum_dictionary = Optional.absent();
 	}
 
 	public String getSessionName() {
@@ -174,6 +181,30 @@ public class SessionConfig {
 
 	public void setPosition (String position) {
 		this.position = Optional.of (position);
+	}
+
+	public boolean hasFieldDictionary() {
+		return this.field_dictionary.isPresent();
+	}
+        
+	public String getFieldDictionary() {
+		return this.field_dictionary.get();
+	}
+        
+	public void setFieldDictionary (String dictionary) {
+		this.field_dictionary = Optional.of (dictionary);
+	}
+        
+	public boolean hasEnumDictionary() {
+		return this.enum_dictionary.isPresent();
+	}
+
+	public String getEnumDictionary() {
+		return this.enum_dictionary.get();
+	}
+
+	public void setEnumDictionary (String dictionary) {
+		this.enum_dictionary = Optional.of (dictionary);
 	}
 
 	@Override

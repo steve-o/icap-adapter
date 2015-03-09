@@ -183,8 +183,19 @@ public class Consumer implements Client, ChainListener {
 		this.rwf_major_version = 0;
 		this.rwf_minor_version = 0;
 		this.is_muted = true;
-		this.pending_directory = true;
-		this.pending_dictionary = true;
+		this.pending_directory = this.pending_dictionary = false;
+		if (!(this.config.hasFieldDictionary() && this.config.hasEnumDictionary())) {
+			LOG.trace ("Requesting Marketfeed dictionary from upstream configured source.");
+			this.pending_directory = this.pending_dictionary = true;
+		} else {
+			LOG.trace ("Reading Marketfeed dictionary from {},{}", this.config.getFieldDictionary(), this.config.getEnumDictionary());
+			try {
+				TibMsg.ReadMfeedDictionary (this.config.getFieldDictionary(), this.config.getEnumDictionary());
+				this.OnMarketDataDictComplete();
+			} catch (TibException e) {
+				LOG.throwing (e);
+			}
+		}
 	}
 
 	private class SubscriptionManager implements Client {
@@ -944,11 +955,53 @@ public class Consumer implements Client, ChainListener {
 
 /* Hard code to RDM dictionary names */
 		if (!this.dictionary_handle.containsKey ("RWFFld")) {
-			this.sendDictionaryRequest (dictionary_service, "RWFFld");
+/* Local file override */
+			if (!this.config.hasFieldDictionary()) {
+				this.sendDictionaryRequest (dictionary_service, "RWFFld");
+			} else {
+				final FieldDictionary field_dictionary = this.rdm_dictionary.getFieldDictionary();
+				FieldDictionary.readRDMFieldDictionary (field_dictionary, this.config.getFieldDictionary());
+/* Additional meta-data only from file dictionaries */
+				LOG.trace ("RDM field dictionary file \"{}\": { " +
+						  "\"Desc\": \"{}\"" +
+						", \"Version\": \"{}\"" +
+						", \"Build\": \"{}\"" +
+						", \"Date\": \"{}\"" +
+						" }",
+						this.config.getFieldDictionary(),
+						field_dictionary.getFieldProperty ("Desc"),
+						field_dictionary.getFieldProperty ("Version"),
+						field_dictionary.getFieldProperty ("Build"),
+						field_dictionary.getFieldProperty ("Date"));
+			}
 		}
 
 		if (!this.dictionary_handle.containsKey ("RWFEnum")) {
-			this.sendDictionaryRequest (dictionary_service, "RWFEnum");
+			if (!this.config.hasEnumDictionary()) {
+				this.sendDictionaryRequest (dictionary_service, "RWFEnum");
+			} else {
+				final FieldDictionary field_dictionary = this.rdm_dictionary.getFieldDictionary();
+				FieldDictionary.readEnumTypeDef (field_dictionary, this.config.getEnumDictionary());
+				LOG.trace ("RDM enumerated tables file \"{}\": { " +
+						  "\"Desc\": \"{}\"" +
+						", \"RT_Version\": \"{}\"" +
+						", \"Build_RDMD\": \"{}\"" +
+						", \"DT_Version\": \"{}\"" +
+						", \"Date\": \"{}\"" +
+						" }",
+						this.config.getEnumDictionary(),
+						field_dictionary.getEnumProperty ("Desc"),
+						field_dictionary.getEnumProperty ("RT_Version"),
+						field_dictionary.getEnumProperty ("Build_RDMD"),
+						field_dictionary.getEnumProperty ("DT_Version"),
+						field_dictionary.getEnumProperty ("Date"));
+			}
+		}
+
+		if (0 == this.dictionary_handle.size()) {
+			LOG.trace ("All dictionaries loaded, resuming subscriptions.");
+			this.pending_dictionary = false;
+			this.resubscribe();
 		}
 
 /* Directory received and processed, ignore all future updates. */
@@ -1386,6 +1439,12 @@ public class Consumer implements Client, ChainListener {
 		}
 	}
 
+	private void OnMarketDataDictComplete() {
+		LOG.trace ("All used dictionaries loaded, resuming subscriptions.");
+		this.appendix_a = this.createDictionaryMap();
+		Chains.ApplyFieldDictionary (this.appendix_a);
+	}
+
 	private void OnMarketDataDictEvent (MarketDataDictEvent event) {
 		LOG.trace ("OnMarketDataDictEvent: {}", event);
 		if (MarketDataDictStatus.OK == event.getStatus().getState()) {
@@ -1414,9 +1473,7 @@ public class Consumer implements Client, ChainListener {
 					--pending_dictionaries;
 			}
 			if (0 == pending_dictionaries) {
-				LOG.trace ("All used dictionaries loaded, resuming subscriptions.");
-				this.appendix_a = this.createDictionaryMap();
-				Chains.ApplyFieldDictionary (this.appendix_a);
+				this.OnMarketDataDictComplete();
 				this.pending_dictionary = false;
 				this.resubscribe();
 			} else {

@@ -122,8 +122,20 @@ public class Rfa {
 				staging.addVariable (fixRfaStringPath (name), value);
 /* Enable dictionary download */
 				name = "/Connections/" + connection_name + "/downloadDataDict";
-				value = "True";
+				value = !(session_config.hasFieldDictionary() && session_config.hasEnumDictionary()) ? "True" : "False";
 				staging.addVariable (fixRfaStringPath (name), value);
+/* appendix_a */
+				if (session_config.hasFieldDictionary()) {
+					name = "/Connections/" + connection_name + "/masterFidFile";
+					value = session_config.getFieldDictionary();
+					staging.addVariable (fixRfaStringPath (name), value);
+				}
+/* enumtype.def */
+				if (session_config.hasEnumDictionary()) {
+					name = "/Connections/" + connection_name + "/enumTypeFile";
+					value = session_config.getEnumDictionary();
+					staging.addVariable (fixRfaStringPath (name), value);
+				}
 /* Disable client side DACS usage */
 				name = "/Connections/" + connection_name + "/dacs_CbeEnabled";
 				value = "False";
