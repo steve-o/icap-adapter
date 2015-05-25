@@ -59,7 +59,7 @@ public class ChainSubscriber implements Handle {
 			return null;
 		} else {
 			LOG.trace ("Subscribing to chain link {}", link_name);
-			this.all_links.add (link_name);
+			this.AddLink (link_name);
 			this.marketDataItemSub.setItemName (link_name);
 			return this.market_data_subscriber.subscribe (this.event_queue, this.marketDataItemSub, client, null);
 		}
@@ -68,6 +68,17 @@ public class ChainSubscriber implements Handle {
 	public void UnsubscribeLink (String link_name, Handle handle) {
 		LOG.trace ("Unsubscribing to chain link {}", link_name);
 		this.market_data_subscriber.unsubscribe (handle);
+		this.all_links.remove (link_name);
+	}
+
+/* Explicit control of link list: note race conditions on adding and removing.
+ * Link must be added before subscribe but not before cyclic check.
+ */
+	public void AddLink (String link_name) {
+		this.all_links.add (link_name);
+	}
+
+	public void RemoveLink (String link_name) {
 		this.all_links.remove (link_name);
 	}
 

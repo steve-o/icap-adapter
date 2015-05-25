@@ -53,7 +53,7 @@ public class LinkSubscriber implements Client {
 		this.next_lr = Optional.absent();
 		this.next_link_subscriber = Optional.absent();
 
-/* market data subscription */
+/* market data subscription, may return an absent handle but will update link state. */
 		this.handle = Optional.fromNullable (this.chain.SubscribeLink (name, this));
 	}
 
@@ -64,10 +64,12 @@ public class LinkSubscriber implements Client {
 			}
 		}
 		Arrays.fill (this.items, Optional.absent());
+/* Active subscription to link name is maintained independent of interest in the link. */
 		if (this.handle.isPresent()) {
 			this.chain.UnsubscribeLink (this.name, this.handle.get());
 			this.handle = Optional.absent();
 		}
+		this.chain.RemoveLink (this.name);
 		if (this.next_lr.isPresent()) {
 			this.next_lr = Optional.absent();
 		}
