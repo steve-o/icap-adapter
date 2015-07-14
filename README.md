@@ -1,4 +1,3 @@
-icap-adapter
-============
+# icap-adapter
 
 Pure Java SSL/RSSL consumer.
