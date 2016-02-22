@@ -11,6 +11,7 @@ import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.MarkerManager;
 import org.joda.time.DateTime;
 import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
@@ -1399,8 +1400,16 @@ public class Consumer implements Client, ChainListener {
 					status = this.field.Next())
 				{
 					if (view.contains (field.MfeedFid())) {
-/* always store last value */
-						item_stream.setLastValue (field.MfeedFid(), new String[]{ this.field.StringData(), dt_as_string });
+						final String new_value = this.field.StringData();
+/* IMPORTANT: only update last value cache if string representation of value has changed,
+ * this will ignore updates and refreshes with the same value introducing ABA problems.
+ */
+						if (item_stream.hasLastValue (field.MfeedFid())
+							&& Objects.equal(new_value, item_stream.getLastValue (field.MfeedFid())[0]))
+						{
+						} else {
+							item_stream.setLastValue (field.MfeedFid(), new String[]{ new_value, dt_as_string });
+						}
 						this.field_set.add (this.field.MfeedFid());
 						if (view.size() == this.field_set.size()) break;
 					}
