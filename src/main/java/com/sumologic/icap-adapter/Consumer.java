@@ -158,6 +158,8 @@ public class Consumer implements Client, ChainListener {
 	private Map<String, FlaggedHandle> dictionary_handle;
 	private ImmutableMap<String, Integer> appendix_a;
 
+	private static final boolean CONFIG_IGNORE_DUPLICATE_REFRESH	= true;
+
 /* Reuters Wire Format versions. */
 	private byte rwf_major_version;
 	private byte rwf_minor_version;
@@ -1380,6 +1382,9 @@ public class Consumer implements Client, ChainListener {
 		}
 	}
 
+/* Called upon receipt of refresh or unsolicited refresh image, updates
+ * images are applied independently to this API.
+ */
 	private void updateLastValueCache (DateTime dt, MarketDataItemEvent event) {
 		final ItemStream item_stream = (ItemStream)event.getClosure();
 /* silently ignore */
@@ -1395,6 +1400,18 @@ public class Consumer implements Client, ChainListener {
 			if (item_stream.hasViewByFid()) {
 				final ImmutableSortedSet<Integer> view = item_stream.getViewByFid();
 				final String dt_as_string = dt.toString();
+/* Multiple options, all with caveats.
+ *
+ * 1) Ignore duplicate unsolicited refresh images, this allows for trade safe
+ *    updates but presents ABA problems on disconnects.
+ * 2) Ignore all duplicate content, this is not trade safe.
+ * 3) Ignore all unsolicited refresh images, data is lost on disconnect and 
+ *    previous value is potentially erroneous.  Recommended to at least wipe
+ *    the cached value.
+ * 4) Apply each and every incoming image, this provides duplicate events if
+ *    the upstream source republishes an unsolicited image.
+ */
+if (CONFIG_IGNORE_DUPLICATE_REFRESH) {
 				for (int status = this.field.First (msg);
 					TibMsg.TIBMSG_OK == status;
 					status = this.field.Next())
@@ -1402,7 +1419,7 @@ public class Consumer implements Client, ChainListener {
 					if (view.contains (field.MfeedFid())) {
 						final String new_value = this.field.StringData();
 /* IMPORTANT: only update last value cache if string representation of value has changed,
- * this will ignore updates and refreshes with the same value introducing ABA problems.
+ * this will ignore refreshes with the same value introducing ABA problems.
  */
 						if (item_stream.hasLastValue (field.MfeedFid())
 							&& Objects.equal(new_value, item_stream.getLastValue (field.MfeedFid())[0]))
@@ -1414,6 +1431,19 @@ public class Consumer implements Client, ChainListener {
 						if (view.size() == this.field_set.size()) break;
 					}
 				}
+} else {
+				for (int status = this.field.First (msg);
+					TibMsg.TIBMSG_OK == status;
+					status = this.field.Next())
+				{
+					if (view.contains (field.MfeedFid())) {
+/* always store last value */
+						item_stream.setLastValue (field.MfeedFid(), new String[]{ this.field.StringData(), dt_as_string });
+						this.field_set.add (this.field.MfeedFid());
+						if (view.size() == this.field_set.size()) break;
+					}
+				}
+}
 			}
 		} catch (TibException e) {
 			LOG.trace ("Unable to unpack data with TibMsg: {}", e.getMessage());
