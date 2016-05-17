@@ -21,6 +21,10 @@ public class Rfa {
 	private static final String RSSL_PROTOCOL       = "rssl";
 	private static final String SSLED_PROTOCOL      = "ssled";
 
+	private static final boolean SSL_TRACE 		= false;
+	private static final boolean RSSL_TRACE		= true;
+	private static final boolean RSSL_MOUNT_TRACE	= true;
+
 	public Rfa (Config config) {
 		this.config = config;
 	}
@@ -85,6 +89,17 @@ public class Rfa {
 			{
 				value = "RSSL";
 				staging.addVariable (fixRfaStringPath (name), value);
+
+				if (RSSL_TRACE) {
+					name = "/Connections/" + connection_name + "/ipcTraceFlags";
+					value = "31";
+					staging.addVariable (fixRfaStringPath (name), value);
+				}
+				if (RSSL_MOUNT_TRACE) {
+					name = "/Connections/" + connection_name + "/mountTrace";
+					value = "True";
+					staging.addVariable (fixRfaStringPath (name), value);
+				}
 			}
 			else if (session_config.getProtocol().equalsIgnoreCase (SSLED_PROTOCOL))
 			{
@@ -142,6 +157,12 @@ public class Rfa {
 				staging.addVariable (fixRfaStringPath (name), value);
 				name = "/Connections/" + connection_name + "/dacs_SbeSubEnabled";
 				staging.addVariable (fixRfaStringPath (name), value);
+
+				if (SSL_TRACE) {
+					name = "/Connections/" + connection_name + "/ipcTraceFlags";
+					value = "15";
+					staging.addVariable (fixRfaStringPath (name), value);
+				}
 			}
 			else
 			{
